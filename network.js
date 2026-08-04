@@ -1,6 +1,7 @@
-const TRYSTERO_URL = "https://esm.run/@trystero-p2p/mqtt@0.25.3";
+const TRYSTERO_URL = "https://esm.run/trystero@0.25.3";
 const APP_ID = "org.vitetris.online.duel.v1";
 const PROTOCOL_VERSION = 1;
+const CONNECT_TIMEOUT = 25000;
 
 export class DuelConnection {
   constructor({code, role}) {
@@ -12,6 +13,7 @@ export class DuelConnection {
     this.actions = null;
     this.listeners = new Map();
     this.closed = false;
+    this.connectTimer = null;
   }
 
   on(type, listener) {
@@ -40,6 +42,7 @@ export class DuelConnection {
       {
         appId: APP_ID,
         password: this.code,
+        relayConfig: {redundancy: 5, warnOnRelayFailure: false},
       },
       this.code,
       {
@@ -51,10 +54,7 @@ export class DuelConnection {
           }
           this.emit("error", {message: message || "Could not establish a direct connection."});
         },
-        onPeerHandshake: async (peerId) => {
-          if (this.peerId && this.peerId !== peerId) throw new Error("busy");
-        },
-        handshakeTimeoutMs: 15000,
+        handshakeTimeoutMs: 20000,
       },
     );
 
@@ -80,6 +80,13 @@ export class DuelConnection {
       this.emit("disconnected", {});
     };
     this.emit("waiting", {code: this.code});
+
+    this.connectTimer = setTimeout(() => {
+      if (this.closed || this.peerId) return;
+      this.emit("error", {
+        message: `Could not find a peer after 25 seconds. The room code "${this.code}" might not match, or a direct connection could not be established.`,
+      });
+    }, CONNECT_TIMEOUT);
   }
 
   receiveHello(data, peerId) {
@@ -94,6 +101,10 @@ export class DuelConnection {
     const firstContact = !this.peerId;
     this.peerId = peerId;
     this.peerRole = data.role;
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
     if (firstContact) {
       this.safeSend("hello", {protocol: PROTOCOL_VERSION, role: this.role}, peerId);
       this.emit("connected", {peerId, role: data.role});
@@ -141,6 +152,10 @@ export class DuelConnection {
     this.closed = true;
     this.peerId = null;
     this.peerRole = null;
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
     const leavePromise = this.room ? this.room.leave() : Promise.resolve();
     this.room = null;
     this.actions = null;

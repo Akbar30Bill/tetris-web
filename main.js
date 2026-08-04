@@ -708,13 +708,14 @@ readyButton.addEventListener("click", markReady);
 copyCodeButton.addEventListener("click", async () => {
   if (!duel) return;
   const session = duel;
+  const link = `${location.origin}${location.pathname}#join=${session.code}`;
   try {
-    await navigator.clipboard.writeText(session.code);
+    await navigator.clipboard.writeText(link);
     if (duel !== session) return;
-    copyCodeButton.textContent = "CODE COPIED";
+    copyCodeButton.textContent = "LINK COPIED";
     setTimeout(() => {
       if (duel === session) copyCodeButton.textContent = `ROOM ${session.code}`;
-    }, 1200);
+    }, 2000);
   } catch {
     if (duel === session) copyCodeButton.textContent = `ROOM ${session.code}`;
   }
@@ -730,5 +731,13 @@ document.addEventListener("visibilitychange", () => {
     engine.pause();
   }
 });
+
+const joinParam = location.hash.match(/^#join=([A-Z2-9]{8})$/i);
+if (joinParam) {
+  const code = joinParam[1].toUpperCase();
+  roomInput.value = code;
+  history.replaceState(null, "", location.pathname);
+  requestAnimationFrame(() => startDuel("guest", code));
+}
 
 requestAnimationFrame(frame);
