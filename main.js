@@ -339,6 +339,10 @@ function receiveMessage(data) {
       engine?.queueGarbage(Math.max(0, Math.min(3, Number(data.amount) || 0)));
       break;
     case "control":
+    case "ready":
+    case "start":
+    case "topout":
+    case "result":
       receiveControl(data);
       break;
     case "requestLobby":
