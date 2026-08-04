@@ -637,14 +637,15 @@ window.addEventListener("keydown", (event) => {
     showMenu();
     return;
   }
-  if (event.code === "Enter") {
-    event.preventDefault();
-    if (mode === "solo") {
-      if (engine.status === "ready") engine.start();
-      else if (engine.status === "gameover") restartSolo();
-    } else {
-      markReady();
-    }
+if (event.code === "Enter") {
+      event.preventDefault();
+      if (mode === "solo") {
+        if (engine.status === "ready") engine.start();
+        else if (engine.status === "gameover") restartSolo();
+        else if (engine.status === "paused") engine.pause();
+      } else {
+        markReady();
+      }
     return;
   }
   if (event.code === "KeyP" && mode === "solo") {
@@ -720,10 +721,14 @@ copyCodeButton.addEventListener("click", async () => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && mode === "solo" && ["running", "clearing", "spawning"].includes(engine?.status)) {
+  if (!document.hidden) {
+    lastFrame = performance.now();
+    if (mode !== "menu") canvas.focus();
+    return;
+  }
+  if (mode === "solo" && ["running", "clearing", "spawning"].includes(engine?.status)) {
     engine.pause();
   }
-  if (!document.hidden) lastFrame = performance.now();
 });
 
 requestAnimationFrame(frame);

@@ -69,7 +69,6 @@ export class TerminalRenderer {
     canvas.height = HEIGHT;
     const context = this.context;
     context.textBaseline = "top";
-    context.textRendering = "optimizeLegibility";
     context.imageSmoothingEnabled = false;
   }
 
@@ -83,7 +82,7 @@ export class TerminalRenderer {
   text(value, x, y, color = WHITE, align = "left", size = 14, bold = true) {
     const context = this.context;
     context.fillStyle = color;
-    context.font = `${bold ? "bold " : ""}${size}px monospace`;
+    context.font = `${bold ? "bold " : ""}${size}px "DejaVu Sans Mono", "Liberation Mono", monospace`;
     context.textAlign = align;
     context.fillText(String(value), Math.round(x), Math.round(y));
   }
@@ -105,7 +104,7 @@ export class TerminalRenderer {
     context.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, width - 1, height - 1);
   }
 
-  fillBox(x, y, width, height, color) {
+fillBox(x, y, width, height, color) {
     const context = this.context;
     context.fillStyle = color;
     context.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
@@ -115,24 +114,29 @@ export class TerminalRenderer {
     const piece = PIECES[value - 1];
     if (!piece) return;
     const context = this.context;
+    const rx = Math.round(x);
+    const ry = Math.round(y);
 
     context.fillStyle = BG_COLORS[value];
-    context.fillRect(x, y, CELL, CELL);
+    context.fillRect(rx, ry, CELL, CELL);
 
     context.fillStyle = COLORS[value];
-    context.fillRect(x, y, CELL, 1);
-    context.fillRect(x, y, 1, CELL);
+    context.fillRect(rx, ry, CELL, 1);
+    context.fillRect(rx, ry, 1, CELL);
 
     context.fillStyle = WHITE;
     context.font = "bold 13px monospace";
-    context.fillText(piece.texture, Math.round(x + 2), Math.round(y + 2));
+    const tx = rx + Math.round((CELL - 14) / 2);
+    const ty = ry + Math.round((CELL - 12) / 2);
+    context.fillText(piece.texture, tx, ty);
   }
 
   drawBoardBackground(x) {
     const context = this.context;
+    const bx = Math.round(x);
     for (let row = 0; row < ROWS; row += 1) {
       for (let column = 0; column < COLS; column += 1) {
-        const cellX = x + column * CELL;
+        const cellX = bx + column * CELL;
         const cellY = BOARD_Y + row * CELL;
         context.fillStyle = FRAME_DIM;
         context.fillRect(cellX + (column % 2 ? 11 : 4), cellY + 9, 1, 1);
@@ -200,8 +204,8 @@ export class TerminalRenderer {
     const maxY = Math.max(...cells.map((cell) => cell.y));
     const pieceWidth = (maxX - minX + 1) * CELL;
     const pieceHeight = (maxY - minY + 1) * CELL;
-    const offsetX = x + 32 - pieceWidth / 2;
-    const offsetY = y + 22 - pieceHeight / 2;
+    const offsetX = Math.round(x + 32 - pieceWidth / 2);
+    const offsetY = Math.round(y + 22 - pieceHeight / 2);
     for (const cell of cells) {
       this.drawBlockCell(piece.type + 1, offsetX + (cell.x - minX) * CELL, offsetY + (cell.y - minY) * CELL);
     }
@@ -211,7 +215,7 @@ export class TerminalRenderer {
     const value = String(message).toUpperCase();
     const boxWidth = Math.min(width - 16, Math.max(88, value.length * 8 + 20));
     const boxX = x + (width - boxWidth) / 2;
-    this.fillBox(boxX, y, boxWidth, 34, "#000");
+    this.fillBox(Math.round(boxX), y, boxWidth, 34, "#000");
     this.box(boxX, y, boxWidth, 34, MAGENTA);
     this.text(value, boxX + boxWidth / 2, y + 10, MAGENTA, "center", 12);
   }
