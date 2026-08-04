@@ -269,7 +269,7 @@ async function startDuel(role, code) {
   modeLabel.textContent = "ONLINE DUEL";
   connectionLabel.textContent = "LOADING PEER NETWORK";
   copyCodeButton.hidden = false;
-  copyCodeButton.textContent = `ROOM ${code}`;
+  copyCodeButton.textContent = "COPY INVITE LINK";
   setupDuelConnection(session);
   showGame();
 
@@ -714,10 +714,10 @@ copyCodeButton.addEventListener("click", async () => {
     if (duel !== session) return;
     copyCodeButton.textContent = "LINK COPIED";
     setTimeout(() => {
-      if (duel === session) copyCodeButton.textContent = `ROOM ${session.code}`;
-    }, 2000);
+      if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
+    }, 3000);
   } catch {
-    if (duel === session) copyCodeButton.textContent = `ROOM ${session.code}`;
+    if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
   }
 });
 
