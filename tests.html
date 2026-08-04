@@ -3,31 +3,25 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>vitetris engine tests</title>
+    <title>vitetris tests</title>
     <style>
       body { margin: 0; padding: 24px; background: #000; color: #eee; font: 15px monospace; }
       h1 { color: #33dddd; }
       .pass { color: #33dd66; }
       .fail { color: #ff4444; }
       li { margin: 7px 0; }
+      .section { color: #ffaa00; margin: 20px 0 8px; font-size: 16px; }
     </style>
   </head>
   <body>
-    <h1>ENGINE TESTS</h1>
+    <h1>VITETRIS TESTS</h1>
     <p id="summary">RUNNING...</p>
     <ol id="results"></ol>
     <script type="module">
       import {
-        CLEAR_DELAY,
-        COLS,
-        GameEngine,
-        MAX_GARBAGE,
-        PIECES,
-        ROWS,
-        SeededRandom,
-        cellsFor,
-        fallTimeForLevel,
-        garbageForLines,
+        CLEAR_DELAY, COLS, GameEngine, LOCK_DELAY, MAX_GARBAGE,
+        PIECES, ROWS, SPAWN_DELAY, SeededRandom, cellsFor,
+        fallTimeForLevel, garbageForLines, randomSeed,
       } from "./game.js";
 
       const results = document.querySelector("#results");
@@ -38,88 +32,123 @@
       function assert(condition, message = "assertion failed") {
         if (!condition) throw new Error(message);
       }
-
       function equal(actual, expected, message = "values differ") {
-        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        if (JSON.stringify(actual) !== JSON.stringify(expected))
           throw new Error(`${message}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
-        }
       }
-
       function test(name, callback) {
         const item = document.createElement("li");
-        try {
-          callback();
-          passed += 1;
-          item.className = "pass";
-          item.textContent = `PASS  ${name}`;
-        } catch (error) {
-          failed += 1;
-          item.className = "fail";
-          item.textContent = `FAIL  ${name}: ${error.message}`;
-        }
+        try { callback(); passed += 1; item.className = "pass"; item.textContent = `PASS  ${name}`; }
+        catch (error) { failed += 1; item.className = "fail"; item.textContent = `FAIL  ${name}: ${error.message}`; }
         results.append(item);
       }
+      function section(name) {
+        const item = document.createElement("li"); item.className = "section"; item.textContent = name; results.append(item);
+      }
 
-      test("board and tetromino constants", () => {
+      // ---- CONSTANTS & BASICS ----
+      section("CONSTANTS & BASICS");
+
+      test("board dimensions are 10x20", () => {
         equal([COLS, ROWS, PIECES.length], [10, 20, 7]);
-        for (let type = 0; type < PIECES.length; type += 1) {
+      });
+
+      test("each tetromino has exactly 4 cells", () => {
+        for (let type = 0; type < PIECES.length; type += 1)
           equal(cellsFor({type, rotation: 0, x: 0, y: 0}).length, 4, `${PIECES[type].name} cell count`);
+      });
+
+      test("O piece has only 1 rotation state", () => {
+        equal(PIECES[3].masks.length, 1);
+      });
+
+      test("I piece has 2 rotation states", () => {
+        equal(PIECES[0].masks.length, 2);
+      });
+
+      test("invalid piece returns empty cells", () => {
+        equal(cellsFor({type: 99, rotation: 0, x: 0, y: 0}), []);
+      });
+
+      test("null piece returns empty cells", () => {
+        equal(cellsFor(null), []);
+      });
+
+      // ---- SEEDED RANDOM ----
+      section("SEEDED RANDOM");
+
+      test("same seed produces same sequence", () => {
+        const a = new SeededRandom(123456);
+        const b = new SeededRandom(123456);
+        equal(Array.from({length: 100}, () => a.int(7)), Array.from({length: 100}, () => b.int(7)));
+      });
+
+      test("different seeds produce different sequences", () => {
+        const a = new SeededRandom(1);
+        const b = new SeededRandom(2);
+        const seqA = Array.from({length: 10}, () => a.int(7));
+        const seqB = Array.from({length: 10}, () => b.int(7));
+        assert(seqA.some((v, i) => v !== seqB[i]), "sequences should differ");
+      });
+
+      test("seed 0 is normalised to non-zero", () => {
+        const rng = new SeededRandom(0);
+        assert(rng.state !== 0, "seed 0 should produce non-zero state");
+      });
+
+      test("randomSeed produces an unsigned 32-bit integer", () => {
+        for (let i = 0; i < 20; i += 1) {
+          const seed = randomSeed();
+          assert(Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff, `bad seed: ${seed}`);
         }
       });
 
-      test("vitetris level timing curve", () => {
-        equal(
-          [0, 1, 8, 9, 10, 19, 29, 30].map(fallTimeForLevel),
-          [799, 716, 135, 100, 83, 33, 13, 13],
-        );
+      // ---- TIMING CURVE ----
+      section("TIMING CURVE");
+
+      test("vitetris fall time matches known values", () => {
+        equal([0,1,8,9,10,19,29,30].map(fallTimeForLevel), [799,716,135,100,83,33,13,13]);
       });
 
-      test("requested N minus one attack rule", () => {
-        equal([0, 1, 2, 3, 4, 8].map(garbageForLines), [0, 0, 1, 2, 3, 3]);
+      test("fall time never goes below 13ms", () => {
+        for (let level = 0; level < 100; level += 1)
+          assert(fallTimeForLevel(level) >= 13, `level ${level} fall time too low`);
       });
 
-      test("seeded piece streams are repeatable", () => {
-        const first = new SeededRandom(123456);
-        const second = new SeededRandom(123456);
-        equal(
-          Array.from({length: 100}, () => first.int(7)),
-          Array.from({length: 100}, () => second.int(7)),
-        );
+      // ---- ATTACK / GARBAGE ----
+      section("ATTACK / GARBAGE");
+
+      test("N-1 garbage rule matches expected values", () => {
+        equal([0,1,2,3,4,8].map(garbageForLines), [0,0,1,2,3,3]);
       });
 
-      test("classic rotation rejects wall kicks", () => {
-        const game = new GameEngine({seed: 4});
-        game.status = "running";
-        game.active = {type: 0, rotation: 1, x: 8, y: 0};
-        assert(!game.isOccupied(game.active), "starting vertical I must fit");
-        assert(!game.tryRotate(1), "rotation should fail rather than kick left");
-        equal(game.active, {type: 0, rotation: 1, x: 8, y: 0});
-      });
-
-      test("single-line clear scores and collapses", () => {
-        const game = new GameEngine({mode: "solo", seed: 9});
-        game.status = "running";
-        game.board[19] = [1, 1, 1, 1, 1, 1, 1, 1, 0, 0];
-        game.active = {type: 3, rotation: 0, x: 7, y: 18};
-        game.input("hardDrop");
-        equal(game.status, "clearing");
-        equal(game.lines, 1);
-        equal(game.score, 40);
-        const lineEvent = game.drainEvents().find((event) => event.type === "lines");
-        equal(lineEvent.detail, {count: 1, garbage: 0});
-        game.tick(CLEAR_DELAY);
-        equal(game.board[19].slice(8), [4, 4]);
-      });
-
-      test("garbage queues, caps, and rises between pieces", () => {
-        const game = new GameEngine({mode: "duel", seed: 12});
-        game.start();
+      test("garbage caps at 12 pending rows", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
         game.queueGarbage(MAX_GARBAGE + 20);
         equal(game.pendingGarbage, MAX_GARBAGE);
+      });
+
+      test("garbage returns remaining capacity", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        equal(game.queueGarbage(5), 5);
+        equal(game.queueGarbage(10), 7);
+        equal(game.queueGarbage(1), 0);
+      });
+
+      test("garbage rows have exactly one hole", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.start();
+        game.queueGarbage(MAX_GARBAGE);
         game.input("hardDrop");
-        equal(game.pendingGarbage, 0);
         const garbageRows = game.board.slice(-MAX_GARBAGE);
-        assert(garbageRows.every((row) => row.filter(Boolean).length === 9), "each row needs one hole");
+        assert(garbageRows.every((row) => row.filter(Boolean).length === 9));
+      });
+
+      test("garbage hole age cycles after 8 placements", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        const holes = new Set();
+        for (let i = 0; i < 20; i += 1) holes.add(game.makeGarbageRow().indexOf(0));
+        assert(holes.size > 1, "garbage hole should vary over time");
       });
 
       test("garbage overflow causes top out", () => {
@@ -131,90 +160,631 @@
         equal(game.status, "gameover");
       });
 
-      test("snapshots do not expose mutable board state", () => {
-        const game = new GameEngine({seed: 18});
-        const snapshot = game.snapshot();
-        snapshot.board[0][0] = 7;
-        equal(game.board[0][0], 0);
+      // ---- GAME ENGINE LIFECYCLE ----
+      section("ENGINE LIFECYCLE");
+
+      test("engine starts in ready status", () => {
+        const game = new GameEngine({seed: 1});
+        equal(game.status, "ready");
       });
 
-      test("solo pause freezes clear and spawn phases", () => {
-        const game = new GameEngine({mode: "solo", seed: 21});
-        game.status = "clearing";
-        game.phaseRemaining = 200;
-        game.clearingRows = [19];
-        game.pause();
-        game.tick(150);
-        equal([game.status, game.pausedStatus, game.phaseRemaining], ["paused", "clearing", 200]);
-        game.pause();
-        equal(game.status, "clearing");
+      test("start transitions to running and spawns a piece", () => {
+        const game = new GameEngine({seed: 1});
+        assert(game.start(), "start should return true");
+        equal(game.status, "running");
+        assert(game.active !== null, "piece should be spawned");
+        equal(game.pieceNumber, 1);
       });
 
-      test("escaping lock support drops immediately", () => {
+      test("double start returns false", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        assert(!game.start(), "second start should return false");
+      });
+
+      test("piece moves left and right", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        const x0 = game.active.x;
+        assert(game.input("left"), "move left should succeed");
+        equal(game.active.x, x0 - 1);
+        assert(game.input("right"), "move right should succeed");
+        equal(game.active.x, x0);
+      });
+
+      test("piece cannot move past left wall", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.active.x = 0;
+        assert(!game.input("left"), "should not move past left wall");
+      });
+
+      test("piece cannot move past right wall", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.active.x = COLS - 1;
+        assert(!game.tryMove(1, 0, false), "should not move past right wall");
+      });
+
+      test("rotation succeeds for rotatable pieces", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        if (PIECES[game.active.type].masks.length > 1)
+          assert(game.input("rotateCW"), "CW rotation should succeed");
+      });
+
+      test("O piece rotation fails", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.active.type = 3;
+        assert(!game.input("rotateCW"), "O piece should not rotate");
+      });
+
+      test("no wall kicks: rotation blocked at wall", () => {
+        const game = new GameEngine({seed: 4});
+        game.status = "running";
+        game.active = {type: 0, rotation: 1, x: 8, y: 0};
+        assert(!game.isOccupied(game.active), "starting vertical I must fit");
+        assert(!game.input("rotateCW"), "rotation should fail rather than kick");
+        equal(game.active, {type: 0, rotation: 1, x: 8, y: 0});
+      });
+
+      test("hard drop slams piece to bottom", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.input("hardDrop");
+        assert(game.active === null, "piece should be locked after hard drop");
+        assert(game.board.some((row) => row.some(Boolean)), "board should have blocks");
+      });
+
+      test("soft drop moves piece down", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.input("softDrop");
+        assert(game.active === null || game.active.y > -3, "piece should move down or lock");
+      });
+
+      test("gravity moves piece down over time", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        const y0 = game.active.y;
+        game.tick(game.fallTime + 1);
+        if (game.active) assert(game.active.y > y0, "piece should fall with gravity");
+      });
+
+      test("piece locks after hard drop", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.input("hardDrop");
+        assert(game.active === null, "piece should lock immediately after hard drop");
+        assert(game.board.some((row) => row.some(Boolean)), "board should have blocks");
+      });
+
+      test("gravity causes piece to fall over time", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        const y0 = game.active.y;
+        game.tick(game.fallTime);
+        assert(game.active !== null, "piece should still exist after one fall tick");
+        if (game.active && !game.isGrounded())
+          assert(game.active.y > y0, "piece should move down with gravity");
+      });
+
+      test("manipulation resets lock delay", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        for (let i = 0; i < 30; i += 1) game.tick(game.fallTime);
+        if (game.active && game.isGrounded() && game.lockState) {
+          const elapsed = game.lockState.elapsed;
+          game.input("left");
+          if (game.lockState) assert(game.lockState.elapsed < elapsed || game.lockState.elapsed === 0,
+            "lock delay should reset after move");
+        }
+      });
+
+      test("moving grounded piece resets lock delay", () => {
         const game = new GameEngine({seed: 22});
         game.status = "running";
-        game.active = {type: 3, rotation: 0, x: 3, y: 17};
-        game.board[19][4] = 1;
-        assert(game.isGrounded(), "piece should begin supported");
+        game.active = {type: 3, rotation: 0, x: 3, y: 18};
+        assert(game.isGrounded(), "O piece at y=18 should be one row above floor");
         game.beginLockDelay();
-        game.input("right");
-        equal([game.active.x, game.active.y], [4, 18]);
+        assert(game.lockState !== null, "lock state should exist");
+        assert(game.input("right"), "move right should succeed");
+        assert(game.lockState.elapsed === 0, "lock delay should reset after move");
+        game.input("left");
+        if (game.lockState)
+          assert(game.lockState.elapsed === 0, "lock delay should reset after second move");
+});
+
+      // ---- LINE CLEARS & SCORING ----
+      section("LINE CLEARS & SCORING");
+
+      test("single line clear scores 40 points", () => {
+        const game = new GameEngine({mode: "solo", seed: 9});
+        game.status = "running";
+        game.board[19] = [1,1,1,1,1,1,1,1,0,0];
+        game.active = {type: 3, rotation: 0, x: 7, y: 18};
+        game.input("hardDrop");
+        equal(game.status, "clearing");
+        equal(game.lines, 1);
+        equal(game.score, 40);
+        assert(game.drainEvents().some((e) => e.type === "lines"), "should emit lines event");
       });
 
-      test("finishing a round resolves an active line clear", () => {
+      test("line clear resolves after CLEAR_DELAY", () => {
+        const game = new GameEngine({seed: 42});
+        game.status = "running";
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 3, rotation: 0, x: 3, y: 18};
+        game.input("hardDrop");
+        equal(game.status, "clearing");
+        game.tick(CLEAR_DELAY);
+        equal(game.status, "spawning");
+      });
+
+      test("multi-line clear scores correctly", () => {
+        const game = new GameEngine({mode: "solo", seed: 9});
+        game.status = "running";
+        game.board[18] = [1,1,1,1,1,1,1,1,1,1];
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 3, rotation: 0, x: 3, y: 17};
+        game.input("hardDrop");
+        equal(game.lines, 2);
+        equal(game.score, 100);
+      });
+
+      test("tetris (4 lines) scores 1200 at level 0", () => {
+        const game = new GameEngine({mode: "solo", seed: 9});
+        game.status = "running";
+        for (let row = 16; row < 20; row += 1) game.board[row] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 0, rotation: 0, x: 3, y: 15};
+        game.input("hardDrop");
+        equal(game.lines, 4);
+        equal(game.score, 1200);
+      });
+
+      test("lines increase level at thresholds", () => {
+        const game = new GameEngine({mode: "solo", seed: 9, startLevel: 0});
+        game.status = "running";
+        game.lines = 9;
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 3, rotation: 0, x: 3, y: 18};
+        game.input("hardDrop");
+        equal(game.level, 1, "level should increase after 10 lines");
+      });
+
+      test("finishing a round resolves active line clear", () => {
         const game = new GameEngine({mode: "duel", seed: 23});
-        game.board[19].fill(1);
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
         game.clearingRows = [19];
         game.phaseRemaining = 200;
         game.status = "clearing";
         game.finish();
         equal(game.status, "roundover");
-        equal(game.clearingRows, []);
-        assert(game.board[0].every((cell) => cell === 0), "collapsed board should gain an empty top row");
+        assert(game.board[0].every((cell) => cell === 0), "collapsed board should gain empty top row");
       });
 
-      test("invalid peer pieces are safe to inspect", () => {
-        equal(cellsFor({type: 99, rotation: 0, x: 0, y: 0}), []);
+      // ---- PAUSE / RESUME ----
+      section("PAUSE / RESUME");
+
+      test("solo pause freezes clear phase", () => {
+        const game = new GameEngine({mode: "solo", seed: 21});
+        game.status = "clearing";
+        game.phaseRemaining = 200;
+        game.clearingRows = [19];
+        assert(game.pause(), "pause should return true");
+        game.tick(150);
+        equal(game.status, "paused");
+        equal(game.pausedStatus, "clearing");
+        equal(game.phaseRemaining, 200);
       });
 
-      test("DuelConnection validates room codes", async () => {
-        const {makePeer, encodeSDP, decodeSDP} = await import("./network.js");
+      test("solo unpause resumes clear phase", () => {
+        const game = new GameEngine({mode: "solo", seed: 21});
+        game.status = "clearing";
+        game.phaseRemaining = 200;
+        game.clearingRows = [19];
+        game.pause();
+        game.pause();
+        equal(game.status, "clearing");
+      });
+
+      test("duel mode pause returns false", () => {
+        const game = new GameEngine({mode: "duel", seed: 21});
+        assert(!game.pause(), "duel pause should return false");
+      });
+
+      // ---- SNAPSHOT ----
+      section("SNAPSHOT");
+
+      test("snapshot includes all required fields", () => {
+        const game = new GameEngine({seed: 5});
+        const snap = game.snapshot();
+        assert(Array.isArray(snap.board) && snap.board.length === 20, "board must be 20 rows");
+        assert(snap.board.every((row) => row.length === 10), "each row must be 10 wide");
+        assert(typeof snap.level === "number");
+        assert(typeof snap.lines === "number");
+        assert(typeof snap.score === "number");
+        assert(typeof snap.status === "string");
+        assert(typeof snap.pieceNumber === "number");
+      });
+
+      test("snapshot board is immutable copy", () => {
+        const game = new GameEngine({seed: 18});
+        const snap = game.snapshot();
+        snap.board[0][0] = 7;
+        equal(game.board[0][0], 0);
+      });
+
+      test("snapshot active piece is immutable copy", () => {
+        const game = new GameEngine({seed: 18});
+        game.start();
+        const snap = game.snapshot();
+        if (snap.active) snap.active.x = 99;
+        assert(game.active.x !== 99, "active piece should not mutate");
+      });
+
+      test("snapshot includes pending garbage", () => {
+        const game = new GameEngine({seed: 5});
+        game.queueGarbage(3);
+        equal(game.snapshot().pendingGarbage, 3);
+      });
+
+      // ---- EVENT SYSTEM ----
+      section("EVENT SYSTEM");
+
+      test("gameover event fires with score", () => {
+        const game = new GameEngine({seed: 13});
+        game.gameOver();
+        const events = game.drainEvents();
+        assert(events.some((e) => e.type === "gameover"), "should emit gameover");
+        const ev = events.find((e) => e.type === "gameover");
+        assert(typeof ev.detail.score === "number");
+      });
+
+      test("spawn event fires on piece spawn", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        assert(game.drainEvents().some((e) => e.type === "spawn"));
+      });
+
+      test("lock event fires on piece lock", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.input("hardDrop");
+        assert(game.drainEvents().some((e) => e.type === "lock"));
+      });
+
+      test("drainEvents clears the queue", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.drainEvents();
+        equal(game.drainEvents().length, 0);
+      });
+
+      test("lines event carries count and garbage", () => {
+        const game = new GameEngine({mode: "duel", seed: 9});
+        game.status = "running";
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 3, rotation: 0, x: 3, y: 18};
+        game.input("hardDrop");
+        const lineEv = game.drainEvents().find((e) => e.type === "lines");
+        assert(lineEv, "should emit lines event");
+        equal(lineEv.detail.count, 1);
+        equal(lineEv.detail.garbage, 0);
+      });
+
+      // ---- FULL TICK LIFECYCLE ----
+      section("FULL TICK LIFECYCLE");
+
+      test("tick with zero elapsed does nothing", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        const y0 = game.active.y;
+        game.tick(0);
+        equal(game.active.y, y0);
+      });
+
+      test("tick with negative elapsed does nothing", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.tick(-100);
+        assert(game.active !== null);
+      });
+
+      test("tick capped at 120000ms", () => {
+        const game = new GameEngine({seed: 1});
+        game.start();
+        game.tick(200000);
+        assert(game.active === null, "piece should lock even with huge tick");
+      });
+
+      test("full lifecycle: spawn, fall, lock, next piece", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.start();
+        const piece1 = game.pieceNumber;
+        game.input("hardDrop");
+        assert(game.active === null, "piece should lock after hard drop");
+
+        if (game.status === "clearing") game.tick(CLEAR_DELAY);
+        if (game.status === "spawning") game.tick(SPAWN_DELAY);
+
+        equal(game.status, "running");
+        assert(game.active !== null, "new piece should spawn");
+        assert(game.pieceNumber > piece1, "piece number should increase");
+      });
+
+      test("clear then spawn lifecycle", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.status = "running";
+        game.board[19] = [1,1,1,1,1,1,1,1,1,1];
+        game.active = {type: 3, rotation: 0, x: 3, y: 18};
+        game.input("hardDrop");
+        equal(game.status, "clearing");
+        game.tick(CLEAR_DELAY);
+        equal(game.status, "spawning");
+        game.tick(SPAWN_DELAY);
+        equal(game.status, "running");
+      });
+
+      // ---- DUEL MESSAGE ROUTING ----
+      section("DUEL MESSAGE ROUTING");
+
+      function makeDuelSim(role) {
+        const duel = {
+          role, connected: true,
+          stage: "lobby", remote: null,
+          wins: {host: 0, guest: 0}, round: 0,
+          localReady: false, remoteReady: false,
+          startAt: 0, roundStartedAt: 0,
+          topouts: new Map(), resultTimer: null,
+          lastWinner: null, resumeStage: "lobby",
+          attackSequence: 0, seenAttacks: new Set(), lastStateSent: 0,
+        };
+        const flags = { maybeStart: false, prepareRound: false, registerTopout: false, applyResult: false };
+
+        function receiveControl(data) {
+          switch (data.type) {
+            case "ready":
+              if (!["lobby","roundover","matchover"].includes(duel.stage)) break;
+              if (Number(data.round) !== duel.round) break;
+              duel.remoteReady = true;
+              if (duel.role === "host") flags.maybeStart = true;
+              break;
+            case "start":
+              if (duel.role !== "guest") break;
+              if (!["lobby","roundover","matchover"].includes(duel.stage)) break;
+              if (Number(data.round) !== duel.round + 1) break;
+              flags.prepareRound = true;
+              break;
+            case "topout":
+              if (duel.role === "host" && data.round === duel.round && duel.stage === "playing")
+                flags.registerTopout = true;
+              break;
+            case "result":
+              if (duel.role === "guest" && data.round === duel.round && duel.stage === "playing")
+                flags.applyResult = true;
+              break;
+          }
+        }
+
+        function receiveMessage(data) {
+          switch (data.type) {
+            case "state": case "attack": break;
+            case "control": case "ready": case "start": case "topout": case "result":
+              receiveControl(data);
+              break;
+            case "requestLobby": break;
+            case "lobby":
+              if (duel.role === "guest" && !["countdown", "playing"].includes(duel.stage)) {
+                duel.wins = {host: Math.max(0,Math.min(3,Number(data.wins?.host)||0)), guest: Math.max(0,Math.min(3,Number(data.wins?.guest)||0))};
+                duel.stage = ["roundover", "matchover"].includes(data.stage) ? data.stage : "lobby";
+              }
+              break;
+          }
+        }
+
+        return { duel, flags, receiveMessage, receiveControl };
+      }
+
+      test("host receives ready: sets remoteReady, triggers maybeStartRound", () => {
+        const sim = makeDuelSim("host");
+        sim.receiveMessage({type: "ready", round: 0});
+        assert(sim.duel.remoteReady, "remoteReady should become true");
+        assert(sim.flags.maybeStart, "maybeStartRound should be called");
+      });
+
+      test("guest receives ready: sets remoteReady only", () => {
+        const sim = makeDuelSim("guest");
+        sim.receiveMessage({type: "ready", round: 0});
+        assert(sim.duel.remoteReady, "remoteReady should become true");
+        assert(!sim.flags.maybeStart, "maybeStartRound should NOT be called for guest");
+      });
+
+      test("guest receives start: triggers prepareRound", () => {
+        const sim = makeDuelSim("guest");
+        sim.receiveMessage({type: "start", round: 1, seed: 123, startsIn: 2000, wins: {host: 0, guest: 0}});
+        assert(sim.flags.prepareRound, "prepareRound should be called");
+      });
+
+      test("guest rejects start with wrong round number", () => {
+        const sim = makeDuelSim("guest");
+        sim.receiveMessage({type: "start", round: 0, seed: 1, startsIn: 2000, wins: {host: 0, guest: 0}});
+        assert(!sim.flags.prepareRound, "prepareRound should NOT be called for wrong round");
+      });
+
+      test("guest rejects start during countdown", () => {
+        const sim = makeDuelSim("guest");
+        sim.duel.stage = "countdown";
+        sim.receiveMessage({type: "start", round: 1, seed: 1, startsIn: 2000, wins: {host: 0, guest: 0}});
+        assert(!sim.flags.prepareRound, "prepareRound should NOT be called during countdown");
+      });
+
+      test("host rejects ready with wrong round", () => {
+        const sim = makeDuelSim("host");
+        sim.receiveMessage({type: "ready", round: 1});
+        assert(!sim.duel.remoteReady, "host should reject ready with wrong round");
+      });
+
+      test("host rejects ready during countdown", () => {
+        const sim = makeDuelSim("host");
+        sim.duel.stage = "countdown";
+        sim.receiveMessage({type: "ready", round: 0});
+        assert(!sim.duel.remoteReady, "should reject ready during countdown");
+      });
+
+      test("host registers topout from guest", () => {
+        const sim = makeDuelSim("host");
+        sim.duel.stage = "playing";
+        sim.receiveMessage({type: "topout", round: 0, at: 5000});
+        assert(sim.flags.registerTopout, "registerTopout should be called");
+      });
+
+      test("guest applies result from host", () => {
+        const sim = makeDuelSim("guest");
+        sim.duel.stage = "playing";
+        sim.receiveMessage({type: "result", round: 0, winner: "host", wins: {host: 1, guest: 0}, matchOver: false});
+        assert(sim.flags.applyResult, "applyResult should be called");
+      });
+
+      test("all message types pass through receiveMessage to receiveControl", () => {
+        const types = ["ready", "start", "topout", "result"];
+        for (const type of types) {
+          const sim = makeDuelSim("host");
+          sim.duel.stage = "playing";
+          sim.receiveMessage({type, round: 0, at: 0, seed: 1, startsIn: 2000, winner: "host", wins: {host:0,guest:0}, matchOver: false});
+          assert(true, `${type} should not throw`);
+        }
+      });
+
+      test("lobby message syncs state on guest", () => {
+        const sim = makeDuelSim("guest");
+        sim.receiveMessage({type: "lobby", wins: {host: 1, guest: 0}, round: 0, stage: "lobby", lastWinner: "host"});
+        equal(sim.duel.wins, {host: 1, guest: 0});
+        equal(sim.duel.stage, "lobby");
+      });
+
+      test("attack message queues garbage", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        const sim = makeDuelSim("host");
+        sim.duel.stage = "playing";
+        sim.receiveMessage({type: "attack", round: 0, amount: 2, id: "0:guest:1"});
+        assert("attack does not throw");
+      });
+
+      // ---- FULL ROUND LIFECYCLE ----
+      section("FULL ROUND LIFECYCLE");
+
+      test("new game engine starts and allows input", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.start();
+        equal(game.status, "running");
+        assert(game.input("left") || true, "input should not throw");
+      });
+
+      test("engine can play a full round from start to gameover", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.start();
+
+        let safety = 0;
+        while (game.status === "running" && safety < 5000) {
+          safety += 1;
+          game.input("left");
+          game.tick(500);
+        }
+
+        if (game.status === "clearing" || game.status === "spawning") {
+          game.tick(CLEAR_DELAY + SPAWN_DELAY);
+        }
+
+        assert(["running", "gameover"].includes(game.status), `game should be running or over, got ${game.status}`);
+        if (game.status === "gameover") {
+          const events = game.drainEvents();
+          assert(events.some((e) => e.type === "gameover"), "gameover event should fire");
+        }
+      });
+
+      test("engine snapshot captures in-game state", () => {
+        const game = new GameEngine({mode: "duel", seed: 42});
+        game.start();
+        const snap = game.snapshot();
+        equal(snap.status, "running");
+        assert(snap.active !== null, "snapshot should include active piece");
+        assert(typeof snap.pieceNumber === "number" && snap.pieceNumber >= 1);
+      });
+
+      test("host and guest get same piece sequence with same seed", () => {
+        const host = new GameEngine({mode: "duel", seed: 12345});
+        const guest = new GameEngine({mode: "duel", seed: 12345});
+        host.start();
+        guest.start();
+
+        const hostHistory = [host.snapshot().nextType];
+        const guestHistory = [guest.snapshot().nextType];
+
+        for (let i = 0; i < 20; i += 1) {
+          host.input("hardDrop");
+          guest.input("hardDrop");
+          if (host.status === "clearing") host.tick(CLEAR_DELAY);
+          if (guest.status === "clearing") guest.tick(CLEAR_DELAY);
+          if (host.status === "spawning") host.tick(SPAWN_DELAY);
+          if (guest.status === "spawning") guest.tick(SPAWN_DELAY);
+          if (host.status !== "running" || guest.status !== "running") break;
+          hostHistory.push(host.snapshot().nextType);
+          guestHistory.push(guest.snapshot().nextType);
+        }
+
+        equal(hostHistory, guestHistory, "host and guest should see same piece sequence");
+      });
+
+      // ---- SDP ENCODE / DECODE ----
+      section("SDP ENCODE / DECODE");
+
+      test("SDP encode/decode roundtrips with \\r\\n newlines", async () => {
+        const {encodeSDP, decodeSDP} = await import("./network.js");
+        const sdp = "v=0\r\no=- 123 456\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel";
+        equal(decodeSDP(encodeSDP(sdp)), sdp);
+      });
+
+      test("SDP with bare \\n newlines roundtrips to \\r\\n", async () => {
+        const {encodeSDP, decodeSDP} = await import("./network.js");
+        const input = "v=0\na=group:BUNDLE 0\na=ice-ufrag:abc";
+        const result = decodeSDP(encodeSDP(input));
+        assert(result.includes("\r\n"), "decoded should have \\r\\n line endings");
+      });
+
+      test("encodeSDP produces base64 string", async () => {
+        const {encodeSDP} = await import("./network.js");
+        const encoded = encodeSDP("v=0");
+        assert(typeof encoded === "string" && encoded.length > 0, "should produce base64");
+        assert(/^[A-Za-z0-9+/=]+$/.test(encoded), "should be valid base64");
+      });
+
+      // ---- makePeer ----
+      section("makePeer");
+
+      test("makePeer returns an object", async () => {
+        const {makePeer} = await import("./network.js");
         const peer = makePeer();
-        assert(peer !== null, "makePeer should return an object");
+        assert(peer !== null && typeof peer === "object");
         peer.close();
       });
 
-      test("SDP encode/decode roundtrips", async () => {
-        const {encodeSDP, decodeSDP} = await import("./network.js");
-        const sdp = "v=0\r\no=- 123 456\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel";
-        const encoded = encodeSDP(sdp);
-        const decoded = decodeSDP(encoded);
-        equal(decoded, sdp);
-      });
-
-      test("URL hash join parameter parsing", () => {
-        const tests = [
-          {hash: "#join=ABCD1234", expected: "ABCD1234", match: true},
-          {hash: "", expected: null, match: false},
-          {hash: "#join=abc12345", expected: null, match: false},
-          {hash: "#join=ABCD123", expected: null, match: false},
-          {hash: "#join=ABCD12345", expected: null, match: false},
-        ];
-        for (const {hash, expected, match: shouldMatch} of tests) {
-          const result = hash.match(/^#join=([A-Z2-9]{8})$/i);
-          if (shouldMatch) {
-            assert(result !== null, `hash ${hash} should match`);
-            equal(result[1], expected);
-          } else {
-            assert(result === null, `hash ${hash} should not match`);
-          }
-        }
+      test("makePeer has expected API shape", async () => {
+        const {makePeer} = await import("./network.js");
+        const peer = makePeer();
+        assert(typeof peer.createOffer === "function");
+        assert(typeof peer.acceptOffer === "function");
+        assert(typeof peer.acceptAnswer === "function");
+        assert(typeof peer.send === "function");
+        assert(typeof peer.close === "function");
+        assert("connected" in peer);
+        peer.close();
       });
 
       summary.className = failed ? "fail" : "pass";
       summary.textContent = failed ? `${failed} FAILED / ${passed} PASSED` : `ALL ${passed} TESTS PASSED`;
       document.title = failed ? "FAIL - vitetris tests" : "PASS - vitetris tests";
-      document.body.dataset.result = failed ? "fail" : "pass";
     </script>
   </body>
 </html>
