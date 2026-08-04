@@ -198,6 +198,25 @@
         }
       });
 
+      test("URL hash join parameter parsing", () => {
+        const tests = [
+          {hash: "#join=ABCD1234", expected: "ABCD1234", match: true},
+          {hash: "", expected: null, match: false},
+          {hash: "#join=abc12345", expected: null, match: false},
+          {hash: "#join=ABCD123", expected: null, match: false},
+          {hash: "#join=ABCD12345", expected: null, match: false},
+        ];
+        for (const {hash, expected, match: shouldMatch} of tests) {
+          const result = hash.match(/^#join=([A-Z2-9]{8})$/i);
+          if (shouldMatch) {
+            assert(result !== null, `hash ${hash} should match`);
+            equal(result[1], expected);
+          } else {
+            assert(result === null, `hash ${hash} should not match`);
+          }
+        }
+      });
+
       summary.className = failed ? "fail" : "pass";
       summary.textContent = failed ? `${failed} FAILED / ${passed} PASSED` : `ALL ${passed} TESTS PASSED`;
       document.title = failed ? "FAIL - vitetris tests" : "PASS - vitetris tests";
