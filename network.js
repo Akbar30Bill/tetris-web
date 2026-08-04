@@ -1,146 +1,88 @@
-const PROTOCOL_VERSION = 1;
+export function makePeer() {
+  const pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
+  const pending = [];
+  let channel = null;
+  let channelReady = false;
+  let onConnected = null;
+  let onData = null;
+  let onDisconnected = null;
 
-export class DuelConnection {
-  constructor({code, role}) {
-    this.code = String(code).trim().toUpperCase();
-    this.role = role;
-    this.listeners = new Map();
-    this.pc = null;
-    this.channel = null;
-    this.connected = false;
-    this.closed = false;
-    this.connectedPeerId = null;
-  }
-
-  on(type, listener) {
-    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
-    this.listeners.get(type).add(listener);
-    return () => this.listeners.get(type)?.delete(listener);
-  }
-
-  emit(type, detail = {}) {
-    for (const listener of this.listeners.get(type) || []) listener(detail);
-  }
-
-  async connect() {
-    if (!globalThis.RTCPeerConnection) throw new Error("This browser does not support WebRTC.");
-    if (this.closed) return;
-    this.emit("waiting", {code: this.code});
-  }
-
-  async createOffer() {
-    this.pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
-    this.channel = this.pc.createDataChannel("game", {ordered: true});
-    this.setupChannel();
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    await this.waitGathering();
-    return this.pc.localDescription.sdp;
-  }
-
-  async acceptOffer(sdp) {
-    this.pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
-    this.pc.ondatachannel = (event) => {
-      this.channel = event.channel;
-      this.setupChannel();
-    };
-    const init = {type: "offer", sdp};
-    await this.pc.setRemoteDescription(new RTCSessionDescription(init));
-    const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer);
-    await this.waitGathering();
-    return this.pc.localDescription.sdp;
-  }
-
-  async acceptAnswer(sdp) {
-    const init = {type: "answer", sdp};
-    await this.pc.setRemoteDescription(new RTCSessionDescription(init));
-  }
-
-  waitGathering() {
-    return new Promise((resolve) => {
-      if (this.pc.iceGatheringState === "complete") return resolve();
-      const timeout = setTimeout(() => resolve(), 3000);
-      this.pc.onicegatheringstatechange = () => {
-        if (this.pc.iceGatheringState === "complete") {
-          clearTimeout(timeout);
-          resolve();
-        }
-      };
-    });
-  }
-
-  setupChannel() {
-    if (!this.channel) return;
-    this.channel.onopen = () => {
-      this.connected = true;
-      this.connectedPeerId = "peer";
-      this.emit("connected", {peerId: "peer", role: this.role === "host" ? "guest" : "host"});
-    };
-    this.channel.onclose = () => {
-      this.connected = false;
-      this.connectedPeerId = null;
-      this.emit("disconnected", {});
-    };
-    this.channel.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg && msg.type) this.emit(msg.type, msg);
-      } catch {}
-    };
-  }
-
-  safeSend(data, critical = false) {
-    if (!this.channel || this.channel.readyState !== "open") return Promise.resolve(false);
-    try {
-      this.channel.send(JSON.stringify(data));
-      return Promise.resolve(true);
-    } catch {
-      if (critical) this.emit("error", {message: "The peer connection has closed."});
-      return Promise.resolve(false);
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+      onDisconnected?.();
     }
+  };
+
+  function setupChannel(ch) {
+    channel = ch;
+    channel.onopen = () => {
+      channelReady = true;
+      for (const msg of pending) channel.send(msg);
+      pending.length = 0;
+      onConnected?.();
+    };
+    channel.onclose = () => onDisconnected?.();
+    channel.onmessage = (e) => {
+      try { onData?.(JSON.parse(e.data)); } catch {}
+    };
   }
 
-  sendState(state) {
-    this.safeSend({type: "state", ...state});
-  }
+  return {
+    async createOffer() {
+      channel = pc.createDataChannel("game", {ordered: true});
+      setupChannel(channel);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await gathering(pc);
+      return pc.localDescription.sdp;
+    },
 
-  sendAttack(attack) {
-    this.safeSend({type: "attack", ...attack});
-  }
+    async acceptAnswer(sdp) {
+      await pc.setRemoteDescription({type: "answer", sdp});
+    },
 
-  sendControl(control, critical = false) {
-    this.safeSend({type: "control", ...control}, critical);
-  }
+    async acceptOffer(sdp) {
+      pc.ondatachannel = (e) => setupChannel(e.channel);
+      await pc.setRemoteDescription({type: "offer", sdp});
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await gathering(pc);
+      return pc.localDescription.sdp;
+    },
 
-  async ping() {
-    return null;
-  }
+    send(data) {
+      const msg = JSON.stringify(data);
+      if (channelReady) channel.send(msg);
+      else pending.push(msg);
+    },
 
-  leave() {
-    this.closed = true;
-    this.connected = false;
-    if (this.channel) { this.channel.close(); this.channel = null; }
-    if (this.pc) { this.pc.close(); this.pc = null; }
-  }
+    close() {
+      channelReady = false;
+      if (channel) { channel.close(); channel = null; }
+      pc.close();
+    },
+
+    set onConnected(fn) { onConnected = fn; },
+    set onData(fn) { onData = fn; },
+    set onDisconnected(fn) { onDisconnected = fn; },
+    get connected() { return channelReady; },
+  };
 }
 
-export function minifySDP(sdp) {
-  return sdp.replace(/\r?\n/g, "|").replace(/ +/g, " ");
+function gathering(pc) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    const timer = setTimeout(resolve, 2000);
+    pc.onicegatheringstatechange = () => {
+      if (pc.iceGatheringState === "complete") { clearTimeout(timer); resolve(); }
+    };
+  });
 }
 
-export function expandSDP(minified) {
-  return minified.replace(/\|/g, "\r\n");
+export function encodeSDP(sdp) {
+  return btoa(sdp.replace(/\r?\n/g, "|").replace(/ +/g, " "));
 }
 
-export function encodeOffer(sdp) {
-  return btoa(minifySDP(sdp));
-}
-
-export function decodeOffer(encoded) {
-  try {
-    return expandSDP(atob(encoded));
-  } catch {
-    return null;
-  }
+export function decodeSDP(encoded) {
+  return atob(encoded).replace(/\|/g, "\r\n");
 }

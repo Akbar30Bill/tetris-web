@@ -21,22 +21,30 @@
 
 <nav class="main-menu" aria-label="Game modes">
           <button id="solo-button" type="button">SOLO GAME</button>
-          <button id="create-button" type="button">CREATE DUEL</button>
-          <form id="join-form" class="join-form">
-            <label for="room-code">JOIN DUEL</label>
-            <div class="join-row">
-              <input id="room-code" name="room" type="text" minlength="8" maxlength="8"
-                inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                placeholder="ROOM CODE" aria-label="Room code input">
-              <button type="submit">JOIN</button>
-            </div>
-          </form>
+          <button id="host-button" type="button">HOST GAME</button>
+          <button id="join-button" type="button">JOIN GAME</button>
         </nav>
 
         <p id="menu-message" class="menu-message" role="status" aria-live="polite">
           ARROWS TO MOVE &nbsp; SPACE TO DROP
         </p>
         <p class="network-note">DUELS USE A DIRECT, ENCRYPTED WEBRTC CONNECTION</p>
+      </section>
+
+      <section id="connect-screen" class="connect-screen" hidden aria-label="Connect">
+        <div class="connect-toolbar">
+          <span id="connect-role-label"></span>
+          <span id="connect-status" class="connect-status" role="status" aria-live="polite"></span>
+          <button id="connect-cancel" class="text-button leave-button" type="button">CANCEL</button>
+        </div>
+        <div class="connect-body">
+          <p id="connect-instruction" class="connect-instruction"></p>
+          <textarea id="connect-textarea" class="connect-textarea" rows="5" spellcheck="false"></textarea>
+          <div class="connect-actions">
+            <button id="connect-copy" type="button" hidden>COPY</button>
+            <button id="connect-paste" type="button" hidden>CONNECT</button>
+          </div>
+        </div>
       </section>
 
       <section id="game-screen" class="game-screen" hidden aria-label="Game">

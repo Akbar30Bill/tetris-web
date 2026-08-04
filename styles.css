@@ -168,6 +168,95 @@ button {
   width: 100%;
 }
 
+.connect-screen {
+  width: min(100%, 520px);
+  min-height: min(480px, calc(100dvh - 36px));
+  border: 2px solid var(--blue);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  box-shadow: inset 0 0 0 2px #000, inset 0 0 0 3px var(--blue-dim);
+}
+
+.connect-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 0.8rem;
+}
+
+#connect-role-label {
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+}
+
+.connect-status {
+  flex: 1;
+  text-align: center;
+  color: var(--yellow);
+}
+
+.connect-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connect-instruction {
+  margin: 0;
+  color: var(--magenta);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.connect-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 90px;
+  padding: 10px;
+  border: 1px solid var(--blue-dim);
+  background: #05050d;
+  color: var(--yellow);
+  font: 11px monospace;
+  resize: vertical;
+  word-break: break-all;
+}
+
+.connect-textarea:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.connect-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.connect-actions button {
+  min-width: 110px;
+  min-height: 42px;
+  border: 1px solid var(--blue);
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+}
+
+.connect-actions button:focus-visible,
+.connect-actions button:hover {
+  background: var(--blue);
+}
+
+.connect-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .game-toolbar {
   width: min(100%, 760px);
   min-height: 31px;
