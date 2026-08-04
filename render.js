@@ -9,20 +9,31 @@ const BOARD_HEIGHT = ROWS * CELL;
 
 const COLORS = [
   "#000000",
-  "#ff3030",
-  "#f4f4f4",
-  "#ff42ff",
-  "#424cff",
-  "#16d5a7",
-  "#ffe13a",
-  "#25ddec",
+  "#dd2222",
+  "#d0d0d0",
+  "#dd33dd",
+  "#3333cc",
+  "#11b891",
+  "#d4b820",
+  "#1db8b8",
+];
+
+const BG_COLORS = [
+  "#000000",
+  "#661111",
+  "#606060",
+  "#601960",
+  "#141464",
+  "#0a5a48",
+  "#5a4d0e",
+  "#0a5454",
 ];
 
 const FRAME = "#3333ff";
-const FRAME_DIM = "#1010a5";
+const FRAME_DIM = "#0d0d6a";
 const MAGENTA = "#ff42ff";
 const YELLOW = "#ffe13a";
-const WHITE = "#f4f4f4";
+const WHITE = "#f0f0f0";
 const GRAY = "#858595";
 const RED = "#ff3030";
 
@@ -56,7 +67,10 @@ export class TerminalRenderer {
     this.context = canvas.getContext("2d", {alpha: false});
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
-    this.context.textBaseline = "alphabetic";
+    const context = this.context;
+    context.textBaseline = "top";
+    context.textRendering = "optimizeLegibility";
+    context.imageSmoothingEnabled = false;
   }
 
   clear() {
@@ -66,10 +80,10 @@ export class TerminalRenderer {
     context.lineWidth = 1;
   }
 
-  text(value, x, y, color = WHITE, align = "left", size = 13, bold = true) {
+  text(value, x, y, color = WHITE, align = "left", size = 14, bold = true) {
     const context = this.context;
     context.fillStyle = color;
-    context.font = `${bold ? "bold " : ""}${size}px "DejaVu Sans Mono", "Liberation Mono", monospace`;
+    context.font = `${bold ? "bold " : ""}${size}px monospace`;
     context.textAlign = align;
     context.fillText(String(value), Math.round(x), Math.round(y));
   }
@@ -91,13 +105,39 @@ export class TerminalRenderer {
     context.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, width - 1, height - 1);
   }
 
-  drawCell(value, x, y) {
+  fillBox(x, y, width, height, color) {
+    const context = this.context;
+    context.fillStyle = color;
+    context.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
+  }
+
+  drawBlockCell(value, x, y) {
     const piece = PIECES[value - 1];
-    if (!piece) {
-      this.text("::", x, y + 13, GRAY, "left", 13);
-      return;
+    if (!piece) return;
+    const context = this.context;
+
+    context.fillStyle = BG_COLORS[value];
+    context.fillRect(x, y, CELL, CELL);
+
+    context.fillStyle = COLORS[value];
+    context.fillRect(x, y, CELL, 1);
+    context.fillRect(x, y, 1, CELL);
+
+    context.fillStyle = WHITE;
+    context.font = "bold 13px monospace";
+    context.fillText(piece.texture, Math.round(x + 2), Math.round(y + 2));
+  }
+
+  drawBoardBackground(x) {
+    const context = this.context;
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let column = 0; column < COLS; column += 1) {
+        const cellX = x + column * CELL;
+        const cellY = BOARD_Y + row * CELL;
+        context.fillStyle = FRAME_DIM;
+        context.fillRect(cellX + (column % 2 ? 11 : 4), cellY + 9, 1, 1);
+      }
     }
-    this.text(piece.texture, x, y + 13, COLORS[value], "left", 13);
   }
 
   drawBoard(source, x, {message = "", showMarker = true} = {}) {
@@ -107,9 +147,7 @@ export class TerminalRenderer {
       if (cell.y >= 0) activeCells.set(`${cell.x},${cell.y}`, view.active.type + 1);
     }
 
-    this.box(x - 2, BOARD_Y - 2, BOARD_WIDTH + 4, BOARD_HEIGHT + 4, FRAME);
-    this.line(x - 4, BOARD_Y - 4, x + 38, BOARD_Y - 4, FRAME_DIM);
-    this.line(x + BOARD_WIDTH - 38, BOARD_Y - 4, x + BOARD_WIDTH + 4, BOARD_Y - 4, FRAME_DIM);
+    this.drawBoardBackground(x);
 
     const isClearing = view.status === "clearing"
       || (view.status === "paused" && view.pausedStatus === "clearing");
@@ -128,14 +166,12 @@ export class TerminalRenderer {
         const active = activeCells.get(`${column},${row}`);
         const value = clearing ? 0 : active || view.board?.[row]?.[column] || 0;
         if (value) {
-          this.drawCell(value, cellX, cellY);
-        } else {
-          const dotX = cellX + (column % 2 ? 11 : 4);
-          this.context.fillStyle = FRAME_DIM;
-          this.context.fillRect(dotX, cellY + 8, 2, 2);
+          this.drawBlockCell(value, cellX, cellY);
         }
       }
     }
+
+    this.box(x - 2, BOARD_Y - 2, BOARD_WIDTH + 4, BOARD_HEIGHT + 4, FRAME);
 
     this.drawNext(view.nextType, x + 48, 4);
     if (showMarker) this.drawDropMarker(view.active, x);
@@ -146,15 +182,16 @@ export class TerminalRenderer {
     const cells = cellsFor(piece);
     if (!cells.length) return;
     const columns = [...new Set(cells.map((cell) => cell.x).filter((x) => x >= 0 && x < COLS))];
-    const y = BOARD_Y + BOARD_HEIGHT + 18;
+    const y = BOARD_Y + BOARD_HEIGHT + 4;
     for (let column = 0; column < COLS; column += 1) {
       this.text(columns.includes(column) ? "==" : "**", boardX + column * CELL, y, FRAME, "left", 12);
     }
   }
 
   drawNext(type, x, y) {
+    this.fillBox(x - 8, y, 80, 52, "#050510");
     this.box(x - 8, y, 80, 52, FRAME);
-    this.text("NEXT", x + 32, y + 12, MAGENTA, "center", 10);
+    this.text("NEXT", x + 32, y + 3, MAGENTA, "center", 10);
     const piece = {type: Number.isInteger(type) && PIECES[type] ? type : 0, rotation: 0, x: 0, y: 0};
     const cells = cellsFor(piece);
     const minX = Math.min(...cells.map((cell) => cell.x));
@@ -164,9 +201,9 @@ export class TerminalRenderer {
     const pieceWidth = (maxX - minX + 1) * CELL;
     const pieceHeight = (maxY - minY + 1) * CELL;
     const offsetX = x + 32 - pieceWidth / 2;
-    const offsetY = y + 30 - pieceHeight / 2;
+    const offsetY = y + 22 - pieceHeight / 2;
     for (const cell of cells) {
-      this.drawCell(piece.type + 1, offsetX + (cell.x - minX) * CELL, offsetY + (cell.y - minY) * CELL);
+      this.drawBlockCell(piece.type + 1, offsetX + (cell.x - minX) * CELL, offsetY + (cell.y - minY) * CELL);
     }
   }
 
@@ -174,10 +211,9 @@ export class TerminalRenderer {
     const value = String(message).toUpperCase();
     const boxWidth = Math.min(width - 16, Math.max(88, value.length * 8 + 20));
     const boxX = x + (width - boxWidth) / 2;
-    this.context.fillStyle = "#000";
-    this.context.fillRect(boxX, y, boxWidth, 34);
+    this.fillBox(boxX, y, boxWidth, 34, "#000");
     this.box(boxX, y, boxWidth, 34, MAGENTA);
-    this.text(value, boxX + boxWidth / 2, y + 22, MAGENTA, "center", 12);
+    this.text(value, boxX + boxWidth / 2, y + 10, MAGENTA, "center", 12);
   }
 
   renderSolo(source, {message = "", topScores = []} = {}) {
@@ -193,20 +229,21 @@ export class TerminalRenderer {
     const color = COLORS[(view.level % 6) + 1];
     const values = [pad(view.score % 1000000, 6), pad(view.level, 2), pad(view.lines, 3)];
     const labels = ["Score", "Level", "Lines"];
+    this.fillBox(x, y, 82, 192, "#050510");
     this.box(x, y, 82, 192, color);
     for (let index = 0; index < 3; index += 1) {
       const top = y + index * 64;
       if (index) this.line(x, top, x + 81, top, color);
-      this.text(labels[index], x + 41, top + 17, MAGENTA, "center", 11);
-      this.text(values[index], x + 41, top + 43, WHITE, "center", 14);
+      this.text(labels[index], x + 41, top + 6, MAGENTA, "center", 11);
+      this.text(values[index], x + 41, top + 32, WHITE, "center", 14);
     }
   }
 
   drawTopScores(scores, x, y) {
-    this.text("Top Scores", x, y, MAGENTA, "left", 12);
+    this.text("Top Scores", x, y - 2, MAGENTA, "left", 12);
     const normalized = scores.length ? scores.slice(0, 5) : [0, 0, 0, 0, 0];
     normalized.forEach((score, index) => {
-      this.text(`${index + 1}. ${pad(score % 1000000, 6)}`, x, y + 22 + index * 17, WHITE, "left", 11, false);
+      this.text(`${index + 1}. ${pad(score % 1000000, 6)}`, x, y + 18 + index * 17, WHITE, "left", 11, false);
     });
   }
 
@@ -215,11 +252,11 @@ export class TerminalRenderer {
     PIECES.forEach((piece, index) => {
       const count = stats[index] || 0;
       sum += count;
-      this.text(piece.texture[0] + piece.name + piece.texture[1], x, y + index * 17, COLORS[index + 1], "left", 11);
-      this.text(pad(count, 3), x + 47, y + index * 17, WHITE, "left", 11, false);
+      this.text(piece.texture[0] + piece.name + piece.texture[1], x, y - 2 + index * 17, COLORS[index + 1], "left", 11);
+      this.text(pad(count, 3), x + 47, y - 2 + index * 17, WHITE, "left", 11, false);
     });
-    this.text("  -----", x, y + 122, GRAY, "left", 11, false);
-    this.text(`SUM ${pad(sum, 4)}`, x, y + 140, WHITE, "left", 11, false);
+    this.text("  -----", x, y + 118, GRAY, "left", 11, false);
+    this.text(`SUM ${pad(sum, 4)}`, x, y + 136, WHITE, "left", 11, false);
   }
 
   renderDuel(localSource, remoteSource, {
@@ -234,25 +271,25 @@ export class TerminalRenderer {
     this.drawBoard(local, 56, {message: localMessage});
     this.drawBoard(remote, 344, {message: remoteMessage, showMarker: false});
     this.drawDuelPanel(local, remote, 240, 82, localWins, remoteWins);
-    this.drawGarbageMeter(local.pendingGarbage || 0, 222, 250, false);
-    this.drawGarbageMeter(remote.pendingGarbage || 0, 330, 250, true);
+    this.drawGarbageMeter(local.pendingGarbage || 0, 222, 256, false);
+    this.drawGarbageMeter(remote.pendingGarbage || 0, 330, 256, true);
   }
 
   drawDuelPanel(local, remote, x, y, localWins, remoteWins) {
     const labels = ["Wins", "Level", "Lines"];
     const leftValues = [localWins, local.level || 0, local.lines || 0];
     const rightValues = [remoteWins, remote.level || 0, remote.lines || 0];
+    this.fillBox(x, y, 80, 192, "#050510");
     this.box(x, y, 80, 192, FRAME);
     this.line(x + 40, y, x + 40, y + 192, FRAME_DIM);
     for (let index = 0; index < 3; index += 1) {
       const top = y + index * 64;
       if (index) this.line(x, top, x + 79, top, FRAME);
-      this.context.fillStyle = "#000";
-      this.context.fillRect(x + 13, top + 3, 54, 17);
-      this.text(labels[index], x + 40, top + 15, MAGENTA, "center", 10);
+      this.fillBox(x + 13, top + 3, 54, 17, "#000");
+      this.text(labels[index], x + 40, top + 4, MAGENTA, "center", 10);
       const width = index === 0 ? 1 : 2;
-      this.text(pad(leftValues[index], width), x + 21, top + 43, WHITE, "center", 13);
-      this.text(pad(rightValues[index], width), x + 60, top + 43, WHITE, "center", 13);
+      this.text(pad(leftValues[index], width), x + 21, top + 30, WHITE, "center", 13);
+      this.text(pad(rightValues[index], width), x + 60, top + 30, WHITE, "center", 13);
     }
   }
 
@@ -262,6 +299,6 @@ export class TerminalRenderer {
       const filled = index < shown;
       this.text(filled ? "^^" : "  ", x, bottom - index * 16, RED, faceRight ? "left" : "right", 11);
     }
-    if (count) this.text(pad(count, 2), x + (faceRight ? 0 : -16), bottom + 20, RED, "left", 10);
+    if (count) this.text(pad(count, 2), x + (faceRight ? 0 : -16), bottom + 6, RED, "left", 10);
   }
 }
