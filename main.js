@@ -140,30 +140,26 @@ async function startHost() {
 
   const encoded = encodeSDP(offerSdp);
   connectStatus.textContent = "OFFER READY";
-  connectInstruction.textContent = "COPY THIS OFFER AND SEND IT TO THE OTHER PLAYER";
+  connectInstruction.textContent = "COPY THIS TEXT AND SEND IT TO THE OTHER PLAYER";
   connectTextarea.value = encoded;
   connectTextarea.readOnly = true;
   connectCopy.hidden = false;
-  connectPaste.hidden = false;
-  connectPaste.textContent = "I GOT THE ANSWER";
-  connectPaste.disabled = true;
-  connectPaste.hidden = false;
-
+  connectCopy.textContent = "COPY";
   connectCopy.onclick = async () => {
     await copyText(encoded);
     connectCopy.textContent = "COPIED!";
-    setTimeout(() => { connectCopy.textContent = "COPY"; }, 2000);
+    setTimeout(() => {
+      if (connectCopy) connectCopy.textContent = "COPY";
+    }, 2000);
   };
 
-  const link = `${location.origin}${location.pathname}#offer=${encodeURIComponent(encoded)}`;
-  connectCopy.textContent = "COPY LINK";
-  connectCopy.onclick = async () => {
-    await copyText(link);
-    connectCopy.textContent = "LINK COPIED!";
-    setTimeout(() => { connectCopy.textContent = "COPY LINK"; }, 2000);
+  connectPaste.hidden = false;
+  connectPaste.disabled = true;
+  connectPaste.textContent = "I GOT THE ANSWER";
+  connectTextarea.oninput = () => {
+    const val = connectTextarea.value.trim();
+    connectPaste.disabled = !val || val === encoded;
   };
-
-  const answerLink = `${location.origin}${location.pathname}#answer=`;
 
   connectPaste.onclick = () => {
     const pasted = connectTextarea.value.trim();
@@ -220,21 +216,13 @@ async function startJoin(offerSdp) {
   connectTextarea.value = encoded;
   connectTextarea.readOnly = true;
   connectCopy.hidden = false;
-  connectPaste.hidden = true;
-
+  connectCopy.textContent = "COPY";
   connectCopy.onclick = async () => {
     await copyText(encoded);
     connectCopy.textContent = "COPIED!";
     setTimeout(() => { connectCopy.textContent = "COPY"; }, 2000);
   };
-
-  const answerLink = `${location.origin}${location.pathname}#answer=${encodeURIComponent(encoded)}`;
-  connectCopy.textContent = "COPY LINK";
-  connectCopy.onclick = async () => {
-    await copyText(answerLink);
-    connectCopy.textContent = "LINK COPIED!";
-    setTimeout(() => { connectCopy.textContent = "COPY LINK"; }, 2000);
-  };
+  connectPaste.hidden = true;
 
   peer.onConnected = () => connected("guest");
   peer.onDisconnected = () => {
