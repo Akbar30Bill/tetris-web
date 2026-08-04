@@ -23,6 +23,7 @@
         PIECES, ROWS, SPAWN_DELAY, SeededRandom, cellsFor,
         fallTimeForLevel, garbageForLines, randomSeed,
       } from "./game.js";
+      import {createRoomCode, formatRoomCode, normalizeRoomCode, roomCodeFromInvite} from "./network.js";
 
       const results = document.querySelector("#results");
       const summary = document.querySelector("#summary");
@@ -737,49 +738,33 @@
         equal(hostHistory, guestHistory, "host and guest should see same piece sequence");
       });
 
-      // ---- SDP ENCODE / DECODE ----
-      section("SDP ENCODE / DECODE");
+      // ---- ROOM CODES ----
+      section("ROOM CODES");
 
-      test("SDP encode/decode roundtrips with \\r\\n newlines", async () => {
-        const {encodeSDP, decodeSDP} = await import("./network.js");
-        const sdp = "v=0\r\no=- 123 456\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel";
-        equal(decodeSDP(encodeSDP(sdp)), sdp);
+      test("generated room code is valid 50-bit Crockford Base32", () => {
+        const roomCode = createRoomCode();
+        assert(/^[0-9a-hjkmnp-tv-z]{10}$/.test(roomCode), `unexpected room code: ${roomCode}`);
+        equal(normalizeRoomCode(roomCode), roomCode);
       });
 
-      test("SDP with bare \\n newlines roundtrips to \\r\\n", async () => {
-        const {encodeSDP, decodeSDP} = await import("./network.js");
-        const input = "v=0\na=group:BUNDLE 0\na=ice-ufrag:abc";
-        const result = decodeSDP(encodeSDP(input));
-        assert(result.includes("\r\n"), "decoded should have \\r\\n line endings");
+      test("room code displays as 3-4-3", () => {
+        equal(formatRoomCode("7k3mp9qd2x"), "7K3-MP9Q-D2X");
       });
 
-      test("encodeSDP produces base64 string", async () => {
-        const {encodeSDP} = await import("./network.js");
-        const encoded = encodeSDP("v=0");
-        assert(typeof encoded === "string" && encoded.length > 0, "should produce base64");
-        assert(/^[A-Za-z0-9+/=]+$/.test(encoded), "should be valid base64");
+      test("room code normalises spaces, hyphens, and Crockford aliases", () => {
+        equal(normalizeRoomCode("  7k3-mp9q-d2x  "), "7k3mp9qd2x");
+        equal(normalizeRoomCode("O1I-L234567"), "0111234567");
       });
 
-      // ---- makePeer ----
-      section("makePeer");
-
-      test("makePeer returns an object", async () => {
-        const {makePeer} = await import("./network.js");
-        const peer = makePeer();
-        assert(peer !== null && typeof peer === "object");
-        peer.close();
+      test("room code rejects malformed values", () => {
+        equal(normalizeRoomCode("ABC-DEFG-HI"), null);
+        equal(normalizeRoomCode("ABC-DEF$-HIJ"), null);
+        equal(normalizeRoomCode("ABCDEFGHIJK"), null);
       });
 
-      test("makePeer has expected API shape", async () => {
-        const {makePeer} = await import("./network.js");
-        const peer = makePeer();
-        assert(typeof peer.createOffer === "function");
-        assert(typeof peer.acceptOffer === "function");
-        assert(typeof peer.acceptAnswer === "function");
-        assert(typeof peer.send === "function");
-        assert(typeof peer.close === "function");
-        assert("connected" in peer);
-        peer.close();
+      test("invite link extracts its room code", () => {
+        equal(roomCodeFromInvite("https://tetris.example/#room=7K3-MP9Q-D2X"), "7k3mp9qd2x");
+        equal(roomCodeFromInvite("#room=7K3-MP9Q-D2X"), "7k3mp9qd2x");
       });
 
       summary.className = failed ? "fail" : "pass";

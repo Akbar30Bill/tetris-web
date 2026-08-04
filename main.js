@@ -1,5 +1,5 @@
 import {GameEngine, randomSeed} from "./game.js";
-import {makePeer, encodeSDP, decodeSDP} from "./network.js";
+import {createRoomCode, formatRoomCode, makePeer, roomCodeFromInvite} from "./network.js";
 import {TerminalRenderer} from "./render.js";
 
 const menuScreen = document.querySelector("#menu-screen");
@@ -19,7 +19,7 @@ const touchControls = document.querySelector("#touch-controls");
 const connectRoleLabel = document.querySelector("#connect-role-label");
 const connectStatus = document.querySelector("#connect-status");
 const connectInstruction = document.querySelector("#connect-instruction");
-const connectTextarea = document.querySelector("#connect-textarea");
+const connectCode = document.querySelector("#connect-code");
 const connectCopy = document.querySelector("#connect-copy");
 const connectPaste = document.querySelector("#connect-paste");
 const connectCancel = document.querySelector("#connect-cancel");
@@ -69,7 +69,9 @@ function showConnect() {
   menuScreen.hidden = true;
   gameScreen.hidden = true;
   connectScreen.hidden = false;
-  connectTextarea.value = "";
+  connectCode.value = "";
+  connectCode.readOnly = false;
+  connectCode.oninput = null;
   connectCopy.hidden = true;
   connectPaste.hidden = true;
 }
@@ -103,162 +105,116 @@ function restartSolo() {
 // --- Connection flow ---
 
 function copyText(text) {
-  return navigator.clipboard.writeText(text);
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  return Promise.reject(new Error("Clipboard access unavailable"));
 }
 
-function copyFromTextarea(ta) {
-  const range = document.createRange();
-  range.selectNodeContents(ta);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  ta.setSelectionRange(0, ta.value.length);
-  const ok = document.execCommand("copy");
-  sel.removeAllRanges();
-  return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+function copyFromField(text) {
+  const fallback = document.createElement("input");
+  fallback.value = text;
+  fallback.style.cssText = "position:fixed;left:-9999px;top:0";
+  document.body.append(fallback);
+  fallback.select();
+  fallback.setSelectionRange(0, text.length);
+  const copied = document.execCommand("copy");
+  fallback.remove();
+  if (!copied) throw new Error("Copy failed");
 }
 
-async function startHost() {
-  cleanupDuel();
-  mode = "duel";
-  showConnect();
-  connectRoleLabel.textContent = "HOST";
-  connectStatus.textContent = "CREATING OFFER...";
-  connectInstruction.textContent = "Creating a direct connection offer...";
-  connectTextarea.placeholder = "Generating...";
-  connectCopy.hidden = true;
-  connectPaste.hidden = true;
+function inviteUrl(roomCode) {
+  return `${location.origin}${location.pathname}#room=${formatRoomCode(roomCode)}`;
+}
 
-  peer = makePeer();
-  let offerSdp;
+async function copyInvite(roomCode, button) {
   try {
-    offerSdp = await peer.createOffer();
-  } catch (err) {
-    connectStatus.textContent = "FAILED: " + err.message;
-    return;
+    await copyText(inviteUrl(roomCode));
+  } catch {
+    copyFromField(inviteUrl(roomCode));
   }
-
-  const encoded = encodeSDP(offerSdp);
-  connectStatus.textContent = "OFFER READY";
-  connectInstruction.textContent = "COPY THIS TEXT AND SEND IT TO THE OTHER PLAYER";
-  connectTextarea.value = encoded;
-  connectTextarea.readOnly = false;
-  connectCopy.hidden = false;
-  connectCopy.textContent = "COPY";
-  connectCopy.onclick = async () => {
-    try {
-      await copyText(encoded);
-    } catch {
-      connectTextarea.select();
-      connectTextarea.setSelectionRange(0, encoded.length);
-      await copyFromTextarea(connectTextarea);
-    }
-    connectCopy.textContent = "COPIED!";
-    connectCopy.style.background = "#2ecc40";
-    connectInstruction.textContent = "NOW PASTE THE ANSWER YOU RECEIVED AND CLICK 'I GOT THE ANSWER'";
-    connectTextarea.value = "";
-    connectTextarea.placeholder = "Paste the answer here...";
-    setTimeout(() => {
-      if (connectCopy) {
-        connectCopy.textContent = "COPY";
-        connectCopy.style.background = "";
-      }
-    }, 2000);
-  };
-
-  connectPaste.hidden = false;
-  connectPaste.disabled = true;
-  connectPaste.textContent = "I GOT THE ANSWER";
-  const checkPaste = () => {
-    const val = connectTextarea.value.trim();
-    connectPaste.disabled = !val || val === encoded;
-  };
-  connectTextarea.oninput = checkPaste;
-  connectTextarea.onpaste = checkPaste;
-
-  connectPaste.onclick = () => {
-    const pasted = connectTextarea.value.trim();
-    if (!pasted || pasted === encoded) return;
-    let sdp;
-    try { sdp = decodeSDP(pasted); } catch {}
-    if (!sdp || !sdp.startsWith("v=")) {
-      connectStatus.textContent = "INVALID ANSWER - TRY AGAIN";
-      return;
-    }
-    connectStatus.textContent = "CONNECTING...";
-    connectInstruction.textContent = "Establishing connection...";
-    connectPaste.disabled = true;
-    connectCopy.hidden = true;
-
-    peer.onConnected = () => connected("host");
-    peer.onDisconnected = () => {
-      if (duel) duelDisconnected();
-    };
-    peer.onData = (data) => {
-      if (data && data.type) receiveMessage(data);
-    };
-    peer.acceptAnswer(sdp).catch((err) => {
-      connectStatus.textContent = "FAILED: " + err.message;
-    });
-  };
-
-  connectCancel.onclick = showMenu;
+  const original = button.textContent;
+  button.textContent = "COPIED!";
+  button.style.background = "#2ecc40";
+  setTimeout(() => {
+    button.textContent = original;
+    button.style.background = "";
+  }, 2000);
 }
 
-async function startJoin(offerSdp) {
-  cleanupDuel();
-  mode = "duel";
-  showConnect();
-  connectRoleLabel.textContent = "GUEST";
-  connectStatus.textContent = "CONNECTING...";
-  connectInstruction.textContent = "Connecting...";
-  connectTextarea.placeholder = "Processing offer...";
-  connectCopy.hidden = true;
-  connectPaste.hidden = true;
-
-  peer = makePeer();
-  let answerSdp;
-  try {
-    answerSdp = await peer.acceptOffer(offerSdp);
-  } catch (err) {
-    connectStatus.textContent = "FAILED: " + err.message;
-    return;
-  }
-
-  const encoded = encodeSDP(answerSdp);
-  connectStatus.textContent = "ANSWER READY";
-  connectInstruction.textContent = "COPY THIS ANSWER AND SEND IT BACK TO THE HOST";
-  connectTextarea.value = encoded;
-  connectTextarea.readOnly = true;
-  connectCopy.hidden = false;
-  connectCopy.textContent = "COPY";
-  connectCopy.onclick = async () => {
-    try {
-      await copyText(encoded);
-    } catch {
-      connectTextarea.select();
-      connectTextarea.setSelectionRange(0, encoded.length);
-      await copyFromTextarea(connectTextarea);
-    }
-    connectCopy.textContent = "COPIED!";
-    connectCopy.style.background = "#2ecc40";
-    setTimeout(() => {
-      if (connectCopy) {
-        connectCopy.textContent = "COPY";
-        connectCopy.style.background = "";
-      }
-    }, 2000);
-  };
-  connectPaste.hidden = true;
-
-  peer.onConnected = () => connected("guest");
+function wirePeer(role) {
+  peer.onConnected = () => connected(role);
   peer.onDisconnected = () => {
     if (duel) duelDisconnected();
   };
   peer.onData = (data) => {
     if (data && data.type) receiveMessage(data);
   };
+  peer.onError = (error) => {
+    if (!duel) {
+      connectStatus.textContent = "CONNECTION FAILED";
+      connectInstruction.textContent = error?.message || "Could not connect to this room.";
+    }
+  };
+}
 
+function startHost() {
+  cleanupDuel();
+  mode = "duel";
+  showConnect();
+  connectRoleLabel.textContent = "HOST";
+  const roomCode = createRoomCode();
+  peer = makePeer({roomCode, role: "host"});
+  wirePeer("host");
+  connectStatus.textContent = "ROOM READY";
+  connectInstruction.textContent = "SHARE THIS CODE OR COPY THE INVITE LINK";
+  connectCode.value = formatRoomCode(roomCode);
+  connectCode.readOnly = true;
+  connectCopy.hidden = false;
+  connectCopy.textContent = "COPY INVITE";
+  connectCopy.onclick = () => copyInvite(roomCode, connectCopy).catch(() => {
+    connectStatus.textContent = "COPY FAILED";
+  });
+  connectPaste.hidden = true;
+  connectCancel.onclick = showMenu;
+}
+
+function showJoin() {
+  showConnect();
+  connectRoleLabel.textContent = "GUEST";
+  connectStatus.textContent = "ENTER ROOM CODE";
+  connectInstruction.textContent = "PASTE AN INVITE LINK OR TYPE THE HOST'S CODE";
+  connectCode.value = "";
+  connectCode.placeholder = "ABC-DEFG-HIJ";
+  connectCode.readOnly = false;
+  connectCopy.hidden = true;
+  connectPaste.hidden = false;
+  connectPaste.textContent = "JOIN GAME";
+  const updateJoin = () => {
+    connectPaste.disabled = !roomCodeFromInvite(connectCode.value);
+  };
+  connectCode.oninput = updateJoin;
+  updateJoin();
+  connectPaste.onclick = () => startJoin(connectCode.value);
+  connectCancel.onclick = showMenu;
+}
+
+function startJoin(rawRoomCode) {
+  const roomCode = roomCodeFromInvite(rawRoomCode);
+  if (!roomCode) {
+    connectStatus.textContent = "INVALID ROOM CODE";
+    return;
+  }
+  cleanupDuel();
+  mode = "duel";
+  showConnect();
+  connectRoleLabel.textContent = "GUEST";
+  connectStatus.textContent = "JOINING ROOM...";
+  connectInstruction.textContent = "WAITING FOR THE HOST TO ACCEPT";
+  connectCode.value = formatRoomCode(roomCode);
+  connectCode.readOnly = true;
+  connectCopy.hidden = true;
+  connectPaste.hidden = true;
+  peer = makePeer({roomCode, role: "guest"});
+  wirePeer("guest");
   connectCancel.onclick = showMenu;
 }
 
@@ -271,7 +227,12 @@ function connected(role) {
   }
   duel.connected = true;
   duel.stage = duel.role === "host" ? "lobby" : "syncing";
-  connectionLabel.textContent = "DIRECT LINK";
+  connectionLabel.textContent = `ROOM ${formatRoomCode(peer.roomCode)}`;
+  copyCodeButton.hidden = false;
+  copyCodeButton.textContent = "COPY INVITE";
+  copyCodeButton.onclick = () => copyInvite(peer.roomCode, copyCodeButton).catch(() => {
+    connectionLabel.textContent = "COPY FAILED";
+  });
   readyButton.hidden = false;
   showGame();
   modeLabel.textContent = "ONLINE DUEL";
@@ -286,6 +247,7 @@ function createSession(role, p) {
   const session = {
     role,
     peer: p,
+    roomCode: p.roomCode,
     connected: false,
     stage: "loading",
     remote: null,
@@ -707,31 +669,7 @@ for (const eventName of ["pointerup", "pointercancel", "lostpointercapture"]) {
 
 soloButton.addEventListener("click", startSolo);
 hostButton.addEventListener("click", startHost);
-joinButton.addEventListener("click", () => {
-  showConnect();
-  connectRoleLabel.textContent = "GUEST";
-  connectStatus.textContent = "PASTE THE OFFER";
-  connectInstruction.textContent = "PASTE THE OFFER YOU RECEIVED FROM THE HOST";
-  connectTextarea.value = "";
-  connectTextarea.readOnly = false;
-  connectTextarea.placeholder = "Paste the host's offer here...";
-  connectCopy.hidden = true;
-  connectPaste.hidden = false;
-  connectPaste.textContent = "CONNECT";
-  connectPaste.disabled = false;
-
-  connectPaste.onclick = () => {
-    const raw = connectTextarea.value.trim();
-    if (!raw) return;
-    let sdp;
-    try { sdp = decodeSDP(raw); } catch {}
-    if (!sdp || !sdp.startsWith("v=")) {
-      connectStatus.textContent = "INVALID OFFER - TRY AGAIN";
-      return;
-    }
-    startJoin(sdp);
-  };
-});
+joinButton.addEventListener("click", showJoin);
 
 connectCancel.addEventListener("click", showMenu);
 
@@ -749,42 +687,12 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// --- URL hash auto-detect ---
+// --- URL hash auto-join ---
 
 function handleHash() {
-  const offerMatch = location.hash.match(/^#offer=(.+)$/i);
-  const answerMatch = location.hash.match(/^#answer=(.+)$/i);
-
-  if (offerMatch) {
-    const encoded = decodeURIComponent(offerMatch[1]);
-    let sdp;
-    try { sdp = decodeSDP(encoded); } catch { return; }
-    if (sdp && sdp.startsWith("v=")) {
-      history.replaceState(null, "", location.pathname);
-      // Auto-fill the guest join flow
-      connectTextarea.value = encoded;
-      startJoin(sdp);
-    }
-    return;
-  }
-
-  if (answerMatch && peer && !peer.connected) {
-    const encoded = decodeURIComponent(answerMatch[1]);
-    let sdp;
-    try { sdp = decodeSDP(encoded); } catch { return; }
-    if (sdp && sdp.startsWith("v=")) {
-      history.replaceState(null, "", location.pathname);
-      // Auto-fill answer on host side
-      connectTextarea.value = encoded;
-      connectStatus.textContent = "CONNECTING...";
-      connectInstruction.textContent = "Establishing connection...";
-      peer.onConnected = () => connected("host");
-      peer.onDisconnected = () => { if (duel) duelDisconnected(); };
-      peer.onData = (data) => { if (data && data.type) receiveMessage(data); };
-      peer.acceptAnswer(sdp).catch(() => {});
-    }
-    return;
-  }
+  if (mode !== "menu" || peer) return;
+  const roomCode = roomCodeFromInvite(location.hash);
+  if (roomCode) startJoin(roomCode);
 }
 
 window.addEventListener("hashchange", handleHash);
@@ -830,6 +738,20 @@ function sanitizeSnapshot(view) {
     status: view.status,
     pausedStatus: ["running", "clearing", "spawning"].includes(view.pausedStatus) ? view.pausedStatus : null,
     pieceNumber: Math.max(0, Number(view.pieceNumber) || 0),
+  };
+}
+
+if (new URLSearchParams(location.search).has("test")) {
+  window.__vitetrisTest = {
+    state() {
+      return {
+        mode,
+        stage: duel?.stage || null,
+        engineStatus: engine?.status || null,
+        round: duel?.round || null,
+        roomCode: duel?.roomCode || peer?.roomCode || null,
+      };
+    },
   };
 }
 

@@ -42,10 +42,10 @@ Point your domain's DNS at GitHub Pages:
 
 ## Duel flow
 
-1. One player selects `CREATE DUEL` — a unique room code is generated.
-2. Click the room code button in the toolbar to copy a shareable link (e.g. `https://tetris.example.com/#join=ABCD1234`).
-3. Share the link with the other player via any messaging app.
-4. The other player opens the link — the page auto-joins the room.
+1. One player selects `HOST GAME` — a unique room code is generated (for example, `7K3-MP9Q-D2X`).
+2. The host copies the invite link, or shares the displayed code directly.
+3. The other player opens the invite link or selects `JOIN GAME` and enters the code.
+4. The host accepts one guest, then both players enter the lobby.
 5. Both press Enter (or tap READY) when ready.
 6. The first to win three rounds wins the match.
 
@@ -68,4 +68,4 @@ Touch controls appear on small or touch-capable screens.
 
 Gameplay timing, piece orientations, scoring, visual language, and multiplayer structure are based on [vitetris](https://www.victornils.net/tetris/) by Victor Geraldsson. Vitetris is distributed under the BSD 2-Clause license; its notice is included in `VITETRIS-LICENSE.txt`.
 
-Trystero is Copyright (c) 2021 Dan Motzenbecker and distributed under the MIT license. It is loaded as an external dependency and is not vendored in this repository.
+Trystero is Copyright (c) 2021 Dan Motzenbecker and distributed under the MIT license. The site loads the pinned `trystero@0.25.3` ESM package for Nostr-based peer discovery. Game data is sent directly between browsers over encrypted WebRTC; public relays are used only to help players discover one another.
