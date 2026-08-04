@@ -126,8 +126,9 @@ fillBox(x, y, width, height, color) {
 
     context.fillStyle = WHITE;
     context.font = "bold 13px monospace";
-    const tx = rx + Math.round((CELL - 14) / 2);
-    const ty = ry + Math.round((CELL - 12) / 2);
+    const textWidth = context.measureText(piece.texture).width;
+    const tx = rx + Math.round((CELL - textWidth) / 2);
+    const ty = ry + 1;
     context.fillText(piece.texture, tx, ty);
   }
 
