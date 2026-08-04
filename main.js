@@ -284,11 +284,15 @@ async function startDuel(role, codeOrSdp) {
   } else {
     connectionLabel.textContent = "CONNECTING...";
     try {
-      const sdp = codeOrSdp;
-      const answer = await connection.acceptOffer(sdp);
+      const answer = await connection.acceptOffer(codeOrSdp);
       if (duel !== session) return;
       const encoded = btoa(answer.replace(/\r?\n/g, "|").replace(/ +/g, " "));
-      history.replaceState(null, "", `#answer=${encodeURIComponent(encoded)}`);
+      const answerLink = `${location.origin}${location.pathname}#answer=${encodeURIComponent(encoded)}`;
+      session.stage = "awaiting_host";
+      connectionLabel.textContent = "SEND LINK BACK TO HOST";
+      copyCodeButton.hidden = false;
+      copyCodeButton.textContent = "COPY ANSWER LINK";
+      setLinkCopy(session, answerLink);
     } catch (err) {
       if (duel !== session) return;
       session.error = err.message;
@@ -558,6 +562,8 @@ if (!duel) return {localMessage: "", remoteMessage: ""};
       return {localMessage: "INITIALIZING", remoteMessage: "..."};
     case "hosting":
       return {localMessage: "SHARE LINK TO PLAY", remoteMessage: "AWAITING GUEST"};
+    case "awaiting_host":
+      return {localMessage: "SEND ANSWER LINK TO HOST", remoteMessage: "AWAITING HOST"};
     case "error":
       return {localMessage: "CONNECTION FAILED", remoteMessage: "RETRY"};
     case "disconnected":

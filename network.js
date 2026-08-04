@@ -32,7 +32,6 @@ export class DuelConnection {
     this.pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
     this.channel = this.pc.createDataChannel("game", {ordered: true});
     this.setupChannel();
-    this.pc.onicecandidate = () => {};
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     await this.waitGathering();
@@ -45,7 +44,6 @@ export class DuelConnection {
       this.channel = event.channel;
       this.setupChannel();
     };
-    this.pc.onicecandidate = () => {};
     const init = {type: "offer", sdp};
     await this.pc.setRemoteDescription(new RTCSessionDescription(init));
     const answer = await this.pc.createAnswer();
@@ -62,8 +60,12 @@ export class DuelConnection {
   waitGathering() {
     return new Promise((resolve) => {
       if (this.pc.iceGatheringState === "complete") return resolve();
+      const timeout = setTimeout(() => resolve(), 3000);
       this.pc.onicegatheringstatechange = () => {
-        if (this.pc.iceGatheringState === "complete") resolve();
+        if (this.pc.iceGatheringState === "complete") {
+          clearTimeout(timeout);
+          resolve();
+        }
       };
     });
   }
