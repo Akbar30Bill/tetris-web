@@ -769,7 +769,7 @@ function handleHash() {
 }
 
 window.addEventListener("hashchange", handleHash);
-handleHash();
+try { handleHash(); } catch (e) { console.warn("hash handler error", e); }
 
 // --- Sanitize remote snapshots ---
 
