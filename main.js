@@ -138,6 +138,8 @@ async function startHost() {
       await copyText(encoded);
       connectCopy.textContent = "COPIED!";
       connectCopy.style.background = "#2ecc40";
+      connectInstruction.textContent = "NOW PASTE THE ANSWER YOU RECEIVED AND CLICK 'I GOT THE ANSWER'";
+      connectTextarea.placeholder = "Paste the answer here...";
       setTimeout(() => {
         if (connectCopy) {
           connectCopy.textContent = "COPY";
