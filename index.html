@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="A terminal-style falling-block game with browser-to-browser online duels.">
+    <title>vitetris online</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="menu-screen" class="menu-screen" aria-labelledby="game-title">
+        <div class="logo" aria-hidden="true">
+          <span>+---------------------+</span>
+          <strong>V I T E T R I S</strong>
+          <span>+------ O N L I N E ----+</span>
+        </div>
+        <h1 id="game-title" class="sr-only">vitetris online</h1>
+
+        <nav class="main-menu" aria-label="Game modes">
+          <button id="solo-button" type="button">SOLO GAME</button>
+          <button id="create-button" type="button">CREATE DUEL</button>
+          <form id="join-form" class="join-form">
+            <label for="room-code">JOIN DUEL</label>
+            <div class="join-row">
+              <input id="room-code" name="room" type="text" minlength="8" maxlength="8"
+                inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+                placeholder="ROOM CODE" aria-describedby="menu-message">
+              <button type="submit">JOIN</button>
+            </div>
+          </form>
+        </nav>
+
+        <p id="menu-message" class="menu-message" role="status" aria-live="polite">
+          ARROWS TO MOVE &nbsp; SPACE TO DROP
+        </p>
+        <p class="network-note">DUELS USE A DIRECT, ENCRYPTED WEBRTC CONNECTION</p>
+      </section>
+
+      <section id="game-screen" class="game-screen" hidden aria-label="Game">
+        <div class="game-toolbar">
+          <span id="mode-label">SOLO</span>
+          <button id="copy-code-button" class="text-button" type="button" hidden></button>
+          <span id="connection-label" role="status" aria-live="polite"></span>
+          <button id="ready-button" class="text-button ready-button" type="button" hidden>READY</button>
+          <button id="leave-button" class="text-button leave-button" type="button">ESC MENU</button>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="game-canvas" width="560" height="416" tabindex="0"
+            aria-label="Falling-block game board"></canvas>
+        </div>
+
+        <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
+          <button type="button" data-action="left" aria-label="Move left">&lt;</button>
+          <button type="button" data-action="right" aria-label="Move right">&gt;</button>
+          <button type="button" data-action="softDrop" aria-label="Soft drop">v</button>
+          <button type="button" data-action="rotateCCW" aria-label="Rotate anticlockwise">B</button>
+          <button type="button" data-action="rotateCW" aria-label="Rotate clockwise">A</button>
+          <button type="button" data-action="hardDrop" class="wide" aria-label="Hard drop">DROP</button>
+        </div>
+
+        <p class="control-hint">
+          LEFT/RIGHT MOVE &nbsp; UP/A ROTATE &nbsp; B REVERSE &nbsp; DOWN SOFT &nbsp; SPACE DROP
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

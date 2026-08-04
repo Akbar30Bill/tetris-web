@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>vitetris engine tests</title>
+    <style>
+      body { margin: 0; padding: 24px; background: #000; color: #eee; font: 15px monospace; }
+      h1 { color: #33dddd; }
+      .pass { color: #33dd66; }
+      .fail { color: #ff4444; }
+      li { margin: 7px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>ENGINE TESTS</h1>
+    <p id="summary">RUNNING...</p>
+    <ol id="results"></ol>
+    <script type="module">
+      import {
+        CLEAR_DELAY,
+        COLS,
+        GameEngine,
+        MAX_GARBAGE,
+        PIECES,
+        ROWS,
+        SeededRandom,
+        cellsFor,
+        fallTimeForLevel,
+        garbageForLines,
+      } from "./game.js";
+
+      const results = document.querySelector("#results");
+      const summary = document.querySelector("#summary");
+      let passed = 0;
+      let failed = 0;
+
+      function assert(condition, message = "assertion failed") {
+        if (!condition) throw new Error(message);
+      }
+
+      function equal(actual, expected, message = "values differ") {
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          throw new Error(`${message}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+        }
+      }
+
+      function test(name, callback) {
+        const item = document.createElement("li");
+        try {
+          callback();
+          passed += 1;
+          item.className = "pass";
+          item.textContent = `PASS  ${name}`;
+        } catch (error) {
+          failed += 1;
+          item.className = "fail";
+          item.textContent = `FAIL  ${name}: ${error.message}`;
+        }
+        results.append(item);
+      }
+
+      test("board and tetromino constants", () => {
+        equal([COLS, ROWS, PIECES.length], [10, 20, 7]);
+        for (let type = 0; type < PIECES.length; type += 1) {
+          equal(cellsFor({type, rotation: 0, x: 0, y: 0}).length, 4, `${PIECES[type].name} cell count`);
+        }
+      });
+
+      test("vitetris level timing curve", () => {
+        equal(
+          [0, 1, 8, 9, 10, 19, 29, 30].map(fallTimeForLevel),
+          [799, 716, 135, 100, 83, 33, 13, 13],
+        );
+      });
+
+      test("requested N minus one attack rule", () => {
+        equal([0, 1, 2, 3, 4, 8].map(garbageForLines), [0, 0, 1, 2, 3, 3]);
+      });
+
+      test("seeded piece streams are repeatable", () => {
+        const first = new SeededRandom(123456);
+        const second = new SeededRandom(123456);
+        equal(
+          Array.from({length: 100}, () => first.int(7)),
+          Array.from({length: 100}, () => second.int(7)),
+        );
+      });
+
+      test("classic rotation rejects wall kicks", () => {
+        const game = new GameEngine({seed: 4});
+        game.status = "running";
+        game.active = {type: 0, rotation: 1, x: 8, y: 0};
+        assert(!game.isOccupied(game.active), "starting vertical I must fit");
+        assert(!game.tryRotate(1), "rotation should fail rather than kick left");
+        equal(game.active, {type: 0, rotation: 1, x: 8, y: 0});
+      });
+
+      test("single-line clear scores and collapses", () => {
+        const game = new GameEngine({mode: "solo", seed: 9});
+        game.status = "running";
+        game.board[19] = [1, 1, 1, 1, 1, 1, 1, 1, 0, 0];
+        game.active = {type: 3, rotation: 0, x: 7, y: 18};
+        game.input("hardDrop");
+        equal(game.status, "clearing");
+        equal(game.lines, 1);
+        equal(game.score, 40);
+        const lineEvent = game.drainEvents().find((event) => event.type === "lines");
+        equal(lineEvent.detail, {count: 1, garbage: 0});
+        game.tick(CLEAR_DELAY);
+        equal(game.board[19].slice(8), [4, 4]);
+      });
+
+      test("garbage queues, caps, and rises between pieces", () => {
+        const game = new GameEngine({mode: "duel", seed: 12});
+        game.start();
+        game.queueGarbage(MAX_GARBAGE + 20);
+        equal(game.pendingGarbage, MAX_GARBAGE);
+        game.input("hardDrop");
+        equal(game.pendingGarbage, 0);
+        const garbageRows = game.board.slice(-MAX_GARBAGE);
+        assert(garbageRows.every((row) => row.filter(Boolean).length === 9), "each row needs one hole");
+      });
+
+      test("garbage overflow causes top out", () => {
+        const game = new GameEngine({mode: "duel", seed: 13});
+        game.start();
+        game.board[0][0] = 1;
+        game.queueGarbage(1);
+        game.input("hardDrop");
+        equal(game.status, "gameover");
+      });
+
+      test("snapshots do not expose mutable board state", () => {
+        const game = new GameEngine({seed: 18});
+        const snapshot = game.snapshot();
+        snapshot.board[0][0] = 7;
+        equal(game.board[0][0], 0);
+      });
+
+      test("solo pause freezes clear and spawn phases", () => {
+        const game = new GameEngine({mode: "solo", seed: 21});
+        game.status = "clearing";
+        game.phaseRemaining = 200;
+        game.clearingRows = [19];
+        game.pause();
+        game.tick(150);
+        equal([game.status, game.pausedStatus, game.phaseRemaining], ["paused", "clearing", 200]);
+        game.pause();
+        equal(game.status, "clearing");
+      });
+
+      test("escaping lock support drops immediately", () => {
+        const game = new GameEngine({seed: 22});
+        game.status = "running";
+        game.active = {type: 3, rotation: 0, x: 3, y: 17};
+        game.board[19][4] = 1;
+        assert(game.isGrounded(), "piece should begin supported");
+        game.beginLockDelay();
+        game.input("right");
+        equal([game.active.x, game.active.y], [4, 18]);
+      });
+
+      test("finishing a round resolves an active line clear", () => {
+        const game = new GameEngine({mode: "duel", seed: 23});
+        game.board[19].fill(1);
+        game.clearingRows = [19];
+        game.phaseRemaining = 200;
+        game.status = "clearing";
+        game.finish();
+        equal(game.status, "roundover");
+        equal(game.clearingRows, []);
+        assert(game.board[0].every((cell) => cell === 0), "collapsed board should gain an empty top row");
+      });
+
+      test("invalid peer pieces are safe to inspect", () => {
+        equal(cellsFor({type: 99, rotation: 0, x: 0, y: 0}), []);
+      });
+
+      summary.className = failed ? "fail" : "pass";
+      summary.textContent = failed ? `${failed} FAILED / ${passed} PASSED` : `ALL ${passed} TESTS PASSED`;
+      document.title = failed ? "FAIL - vitetris tests" : "PASS - vitetris tests";
+      document.body.dataset.result = failed ? "fail" : "pass";
+    </script>
+  </body>
+</html>

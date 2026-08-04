@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>vitetris visual tests</title>
+    <style>
+      body { margin: 0; padding: 20px; background: #111; color: #ddd; font: 13px monospace; }
+      main { display: flex; flex-wrap: wrap; gap: 24px; }
+      section { background: #000; border: 1px solid #222; padding: 10px; }
+      canvas { display: block; width: min(700px, calc(100vw - 64px)); height: auto; image-rendering: pixelated; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <p>DUEL RENDER</p>
+        <canvas id="duel" width="560" height="416"></canvas>
+      </section>
+      <section>
+        <p>SOLO RENDER</p>
+        <canvas id="solo" width="560" height="416"></canvas>
+      </section>
+    </main>
+    <script type="module">
+      import {GameEngine} from "./game.js";
+      import {TerminalRenderer} from "./render.js";
+
+      function fixture(seed) {
+        const game = new GameEngine({seed});
+        game.start();
+        for (let row = 12; row < 20; row += 1) {
+          for (let column = 0; column < 10; column += 1) {
+            if ((column * 7 + row * 3 + seed) % 5 > 1) game.board[row][column] = (column + row) % 7 + 1;
+          }
+        }
+        game.lines = seed % 42;
+        game.level = Math.floor(game.lines / 10);
+        game.score = seed * 319;
+        game.pendingGarbage = seed % 8;
+        game.stats = game.stats.map((_, index) => seed + index * 3);
+        return game;
+      }
+
+      const local = fixture(17);
+      const remote = fixture(29);
+      new TerminalRenderer(document.querySelector("#duel")).renderDuel(local, remote, {
+        localWins: 2,
+        remoteWins: 1,
+        localMessage: "PRESS ENTER",
+        remoteMessage: "READY",
+      });
+      new TerminalRenderer(document.querySelector("#solo")).renderSolo(local, {
+        message: "-- PAUSE --",
+        topScores: [415490, 284528, 244339, 203341, 185026],
+      });
+    </script>
+  </body>
+</html>
