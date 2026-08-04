@@ -126,10 +126,9 @@ fillBox(x, y, width, height, color) {
 
     context.fillStyle = WHITE;
     context.font = "bold 13px monospace";
-    const textWidth = context.measureText(piece.texture).width;
-    const tx = rx + Math.round((CELL - textWidth) / 2);
-    const ty = ry + 1;
-    context.fillText(piece.texture, tx, ty);
+    context.textAlign = "center";
+    context.fillText(piece.texture, rx + 8, ry + 2);
+    context.textAlign = "left";
   }
 
   drawBoardBackground(x) {
@@ -196,7 +195,6 @@ fillBox(x, y, width, height, color) {
   drawNext(type, x, y) {
     this.fillBox(x - 8, y, 80, 52, "#050510");
     this.box(x - 8, y, 80, 52, FRAME);
-    this.text("NEXT", x + 32, y + 3, MAGENTA, "center", 10);
     const piece = {type: Number.isInteger(type) && PIECES[type] ? type : 0, rotation: 0, x: 0, y: 0};
     const cells = cellsFor(piece);
     const minX = Math.min(...cells.map((cell) => cell.x));
@@ -210,6 +208,8 @@ fillBox(x, y, width, height, color) {
     for (const cell of cells) {
       this.drawBlockCell(piece.type + 1, offsetX + (cell.x - minX) * CELL, offsetY + (cell.y - minY) * CELL);
     }
+    this.fillBox(x - 6, y, 76, 18, "#050510");
+    this.text("NEXT", x + 32, y + 3, MAGENTA, "center", 10);
   }
 
   drawMessage(message, x, y, width) {

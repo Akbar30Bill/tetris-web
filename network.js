@@ -1,4 +1,4 @@
-const TRYSTERO_URL = "https://esm.run/@trystero-p2p/nostr@0.25.3";
+const TRYSTERO_URL = "https://esm.run/@trystero-p2p/mqtt@0.25.3";
 const APP_ID = "org.vitetris.online.duel.v1";
 const PROTOCOL_VERSION = 1;
 
