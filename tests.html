@@ -23,12 +23,13 @@
         PIECES, ROWS, SPAWN_DELAY, SeededRandom, cellsFor,
         fallTimeForLevel, garbageForLines, randomSeed,
       } from "./game.js";
-      import {createRoomCode, formatRoomCode, normalizeRoomCode, roomCodeFromInvite} from "./network.js";
+      import {createRoomCode, formatRoomCode, makePeer, normalizeRoomCode, roomCodeFromInvite} from "./network.js";
 
       const results = document.querySelector("#results");
       const summary = document.querySelector("#summary");
       let passed = 0;
       let failed = 0;
+      const asyncTests = [];
 
       function assert(condition, message = "assertion failed") {
         if (!condition) throw new Error(message);
@@ -42,6 +43,14 @@
         try { callback(); passed += 1; item.className = "pass"; item.textContent = `PASS  ${name}`; }
         catch (error) { failed += 1; item.className = "fail"; item.textContent = `FAIL  ${name}: ${error.message}`; }
         results.append(item);
+      }
+      function testAsync(name, callback) {
+        const item = document.createElement("li");
+        results.append(item);
+        asyncTests.push(async () => {
+          try { await callback(); passed += 1; item.className = "pass"; item.textContent = `PASS  ${name}`; }
+          catch (error) { failed += 1; item.className = "fail"; item.textContent = `FAIL  ${name}: ${error.message}`; }
+        });
       }
       function section(name) {
         const item = document.createElement("li"); item.className = "section"; item.textContent = name; results.append(item);
@@ -767,6 +776,37 @@
         equal(roomCodeFromInvite("#room=7K3-MP9Q-D2X"), "7k3mp9qd2x");
       });
 
+      testAsync("connected handler replays an early room join", async () => {
+        const handlers = {};
+        const action = {send: () => Promise.resolve()};
+        const room = {
+          makeAction: () => action,
+          leave: () => {},
+          set onPeerHandshake(fn) { handlers.handshake = fn; },
+          set onPeerJoin(fn) { handlers.join = fn; },
+          set onPeerLeave(fn) { handlers.leave = fn; },
+        };
+        const peer = makePeer({
+          roomCode: "7k3mp9qd2x",
+          role: "host",
+          join: (_config, _roomCode, callbacks) => {
+            handlers.handshake = callbacks.onPeerHandshake;
+            return room;
+          },
+        });
+        await handlers.handshake(
+          "guest-1",
+          () => Promise.resolve(),
+          () => Promise.resolve({data: {protocol: "duel-v1", role: "guest"}}),
+        );
+        handlers.join("guest-1");
+        let calls = 0;
+        peer.onConnected = () => { calls += 1; };
+        equal(calls, 1, "late handler should receive existing connection");
+        peer.close();
+      });
+
+      await Promise.all(asyncTests.map((callback) => callback()));
       summary.className = failed ? "fail" : "pass";
       summary.textContent = failed ? `${failed} FAILED / ${passed} PASSED` : `ALL ${passed} TESTS PASSED`;
       document.title = failed ? "FAIL - vitetris tests" : "PASS - vitetris tests";
