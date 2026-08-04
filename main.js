@@ -103,19 +103,7 @@ function restartSolo() {
 // --- Connection flow ---
 
 function copyText(text) {
-  return new Promise((resolve) => {
-    const fallback = () => {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.cssText = "position:fixed;opacity:0;pointer-events:none";
-      document.body.append(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      ta.remove();
-      resolve(ok);
-    };
-    navigator.clipboard.writeText(text).then(resolve).catch(fallback);
-  });
+  return navigator.clipboard.writeText(text);
 }
 
 async function startHost() {
@@ -142,15 +130,26 @@ async function startHost() {
   connectStatus.textContent = "OFFER READY";
   connectInstruction.textContent = "COPY THIS TEXT AND SEND IT TO THE OTHER PLAYER";
   connectTextarea.value = encoded;
-  connectTextarea.readOnly = true;
+  connectTextarea.readOnly = false;
   connectCopy.hidden = false;
   connectCopy.textContent = "COPY";
   connectCopy.onclick = async () => {
-    await copyText(encoded);
-    connectCopy.textContent = "COPIED!";
-    setTimeout(() => {
-      if (connectCopy) connectCopy.textContent = "COPY";
-    }, 2000);
+    try {
+      await copyText(encoded);
+      connectCopy.textContent = "COPIED!";
+      connectCopy.style.background = "#2ecc40";
+      setTimeout(() => {
+        if (connectCopy) {
+          connectCopy.textContent = "COPY";
+          connectCopy.style.background = "";
+        }
+      }, 2000);
+    } catch {
+      connectCopy.textContent = "FAILED";
+      setTimeout(() => {
+        if (connectCopy) connectCopy.textContent = "COPY";
+      }, 2000);
+    }
   };
 
   connectPaste.hidden = false;
@@ -218,9 +217,22 @@ async function startJoin(offerSdp) {
   connectCopy.hidden = false;
   connectCopy.textContent = "COPY";
   connectCopy.onclick = async () => {
-    await copyText(encoded);
-    connectCopy.textContent = "COPIED!";
-    setTimeout(() => { connectCopy.textContent = "COPY"; }, 2000);
+    try {
+      await copyText(encoded);
+      connectCopy.textContent = "COPIED!";
+      connectCopy.style.background = "#2ecc40";
+      setTimeout(() => {
+        if (connectCopy) {
+          connectCopy.textContent = "COPY";
+          connectCopy.style.background = "";
+        }
+      }, 2000);
+    } catch {
+      connectCopy.textContent = "FAILED";
+      setTimeout(() => {
+        if (connectCopy) connectCopy.textContent = "COPY";
+      }, 2000);
+    }
   };
   connectPaste.hidden = true;
 
