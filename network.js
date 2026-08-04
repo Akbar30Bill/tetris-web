@@ -58,6 +58,8 @@ export function makePeer({roomCode, role, join = joinRoom}) {
   let onData = null;
   let onDisconnected = null;
   let onError = null;
+  let onJoinRequest = null;
+  let pendingApproval = null;
   const pendingMessages = [];
   const pendingHandshakes = new Set();
   const admittedPeers = new Set();
@@ -77,6 +79,12 @@ export function makePeer({roomCode, role, join = joinRoom}) {
         const expectedRole = role === "host" ? "guest" : "host";
         if (data?.protocol !== ACTION_ID || data?.role !== expectedRole) {
           throw new Error("Incompatible duel peer");
+        }
+        if (role === "host") {
+          await new Promise((resolve, reject) => {
+            pendingApproval = {peerId, resolve, reject};
+            onJoinRequest?.(peerId);
+          });
         }
         admittedPeers.add(peerId);
       } finally {
@@ -123,7 +131,15 @@ export function makePeer({roomCode, role, join = joinRoom}) {
       connected = false;
       remotePeerId = null;
       pendingMessages.length = 0;
+      pendingApproval?.reject(new Error("Room closed"));
+      pendingApproval = null;
       room.leave();
+    },
+    acceptJoin() {
+      if (!pendingApproval) return false;
+      pendingApproval.resolve();
+      pendingApproval = null;
+      return true;
     },
     set onConnected(fn) {
       onConnected = fn;
@@ -132,6 +148,10 @@ export function makePeer({roomCode, role, join = joinRoom}) {
     set onData(fn) { onData = fn; },
     set onDisconnected(fn) { onDisconnected = fn; },
     set onError(fn) { onError = fn; },
+    set onJoinRequest(fn) {
+      onJoinRequest = fn;
+      if (pendingApproval) onJoinRequest?.(pendingApproval.peerId);
+    },
     get connected() { return connected; },
   };
 }

@@ -45,7 +45,7 @@ Point your domain's DNS at GitHub Pages:
 1. One player selects `HOST GAME` — a unique room code is generated (for example, `7K3-MP9Q-D2X`).
 2. The host copies the invite link, or shares the displayed code directly.
 3. The other player opens the invite link or selects `JOIN GAME` and enters the code.
-4. The host accepts one guest, then both players enter the lobby.
+4. The host presses `ACCEPT PLAYER` when the guest requests to join, then both players enter the lobby.
 5. Both press Enter (or tap READY) when ready.
 6. The first to win three rounds wins the match.
 
