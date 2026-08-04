@@ -20,6 +20,9 @@ test("host and guest join by room link and start a duel", async ({browser, baseU
     expect(roomCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{3}$/);
 
     await guest.goto(`${baseURL}/?test=1#room=${roomCode}`);
+    await expect(host.locator("#connect-status")).toHaveText("PLAYER REQUESTING", {timeout: 45000});
+    await expect(host.getByRole("button", {name: "ACCEPT PLAYER"})).toBeEnabled();
+    await host.getByRole("button", {name: "ACCEPT PLAYER"}).click();
     await expect(host.locator("#game-screen")).toBeVisible({timeout: 45000});
     await expect(guest.locator("#game-screen")).toBeVisible({timeout: 45000});
 

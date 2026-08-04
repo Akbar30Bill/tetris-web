@@ -154,6 +154,21 @@ function wirePeer(role) {
       connectInstruction.textContent = error?.message || "Could not connect to this room.";
     }
   };
+  peer.onJoinRequest = () => {
+    if (role !== "host" || duel) return;
+    connectStatus.textContent = "PLAYER REQUESTING";
+    connectInstruction.textContent = "PRESS ACCEPT PLAYER TO START THE DUEL";
+    connectPaste.hidden = false;
+    connectPaste.disabled = false;
+    connectPaste.textContent = "ACCEPT PLAYER";
+    connectPaste.onclick = () => {
+      if (!peer?.acceptJoin()) return;
+      connectStatus.textContent = "CONNECTING...";
+      connectInstruction.textContent = "Opening the direct game link...";
+      connectPaste.disabled = true;
+      connectPaste.textContent = "ACCEPTED";
+    };
+  };
 }
 
 function startHost() {

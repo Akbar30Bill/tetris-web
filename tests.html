@@ -794,11 +794,14 @@
             return room;
           },
         });
-        await handlers.handshake(
+        const handshake = handlers.handshake(
           "guest-1",
           () => Promise.resolve(),
           () => Promise.resolve({data: {protocol: "duel-v1", role: "guest"}}),
         );
+        await new Promise((resolve) => setTimeout(resolve));
+        assert(peer.acceptJoin(), "host should explicitly accept the pending player");
+        await handshake;
         handlers.join("guest-1");
         let calls = 0;
         peer.onConnected = () => { calls += 1; };
