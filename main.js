@@ -269,6 +269,7 @@ async function startDuel(role, codeOrSdp) {
       session.offerSdp = sdp;
       session.code = encoded.slice(0, 8);
       const link = `${location.origin}${location.pathname}#connect=${encodeURIComponent(encoded)}`;
+      session.stage = "hosting";
       connectionLabel.textContent = "INVITE LINK READY";
       copyCodeButton.textContent = "COPY INVITE LINK";
       copyCodeButton.hidden = false;
@@ -551,12 +552,12 @@ function soloMessage() {
 }
 
 function duelMessages(now) {
-  if (!duel) return {localMessage: "", remoteMessage: ""};
+if (!duel) return {localMessage: "", remoteMessage: ""};
   switch (duel.stage) {
     case "loading":
       return {localMessage: "INITIALIZING", remoteMessage: "..."};
-    case "connecting":
-      return {localMessage: "AWAITING PEER", remoteMessage: "WAITING"};
+    case "hosting":
+      return {localMessage: "SHARE LINK TO PLAY", remoteMessage: "AWAITING GUEST"};
     case "error":
       return {localMessage: "CONNECTION FAILED", remoteMessage: "RETRY"};
     case "disconnected":
