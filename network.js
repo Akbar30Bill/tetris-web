@@ -46,7 +46,7 @@ export function roomCodeFromInvite(value) {
   return normalizeRoomCode(raw);
 }
 
-export function makePeer({roomCode, role}) {
+export function makePeer({roomCode, role, join = joinRoom}) {
   const normalizedRoomCode = normalizeRoomCode(roomCode);
   if (!normalizedRoomCode) throw new Error("Invalid room code");
   if (!['host', 'guest'].includes(role)) throw new Error("Invalid duel role");
@@ -62,7 +62,7 @@ export function makePeer({roomCode, role}) {
   const pendingHandshakes = new Set();
   const admittedPeers = new Set();
 
-  const room = joinRoom({appId: APP_ID}, normalizedRoomCode, {
+  const room = join({appId: APP_ID}, normalizedRoomCode, {
     onJoinError({error}) {
       if (!closed) onError?.(error instanceof Error ? error : new Error(String(error)));
     },
@@ -125,7 +125,10 @@ export function makePeer({roomCode, role}) {
       pendingMessages.length = 0;
       room.leave();
     },
-    set onConnected(fn) { onConnected = fn; },
+    set onConnected(fn) {
+      onConnected = fn;
+      if (connected) onConnected?.();
+    },
     set onData(fn) { onData = fn; },
     set onDisconnected(fn) { onDisconnected = fn; },
     set onError(fn) { onError = fn; },
