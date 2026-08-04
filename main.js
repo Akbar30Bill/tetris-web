@@ -106,6 +106,18 @@ function copyText(text) {
   return navigator.clipboard.writeText(text);
 }
 
+function copyFromTextarea(ta) {
+  const range = document.createRange();
+  range.selectNodeContents(ta);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  ta.setSelectionRange(0, ta.value.length);
+  const ok = document.execCommand("copy");
+  sel.removeAllRanges();
+  return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+}
+
 async function startHost() {
   cleanupDuel();
   mode = "duel";
@@ -136,31 +148,33 @@ async function startHost() {
   connectCopy.onclick = async () => {
     try {
       await copyText(encoded);
-      connectCopy.textContent = "COPIED!";
-      connectCopy.style.background = "#2ecc40";
-      connectInstruction.textContent = "NOW PASTE THE ANSWER YOU RECEIVED AND CLICK 'I GOT THE ANSWER'";
-      connectTextarea.placeholder = "Paste the answer here...";
-      setTimeout(() => {
-        if (connectCopy) {
-          connectCopy.textContent = "COPY";
-          connectCopy.style.background = "";
-        }
-      }, 2000);
     } catch {
-      connectCopy.textContent = "FAILED";
-      setTimeout(() => {
-        if (connectCopy) connectCopy.textContent = "COPY";
-      }, 2000);
+      connectTextarea.select();
+      connectTextarea.setSelectionRange(0, encoded.length);
+      await copyFromTextarea(connectTextarea);
     }
+    connectCopy.textContent = "COPIED!";
+    connectCopy.style.background = "#2ecc40";
+    connectInstruction.textContent = "NOW PASTE THE ANSWER YOU RECEIVED AND CLICK 'I GOT THE ANSWER'";
+    connectTextarea.value = "";
+    connectTextarea.placeholder = "Paste the answer here...";
+    setTimeout(() => {
+      if (connectCopy) {
+        connectCopy.textContent = "COPY";
+        connectCopy.style.background = "";
+      }
+    }, 2000);
   };
 
   connectPaste.hidden = false;
   connectPaste.disabled = true;
   connectPaste.textContent = "I GOT THE ANSWER";
-  connectTextarea.oninput = () => {
+  const checkPaste = () => {
     const val = connectTextarea.value.trim();
     connectPaste.disabled = !val || val === encoded;
   };
+  connectTextarea.oninput = checkPaste;
+  connectTextarea.onpaste = checkPaste;
 
   connectPaste.onclick = () => {
     const pasted = connectTextarea.value.trim();
@@ -221,20 +235,19 @@ async function startJoin(offerSdp) {
   connectCopy.onclick = async () => {
     try {
       await copyText(encoded);
-      connectCopy.textContent = "COPIED!";
-      connectCopy.style.background = "#2ecc40";
-      setTimeout(() => {
-        if (connectCopy) {
-          connectCopy.textContent = "COPY";
-          connectCopy.style.background = "";
-        }
-      }, 2000);
     } catch {
-      connectCopy.textContent = "FAILED";
-      setTimeout(() => {
-        if (connectCopy) connectCopy.textContent = "COPY";
-      }, 2000);
+      connectTextarea.select();
+      connectTextarea.setSelectionRange(0, encoded.length);
+      await copyFromTextarea(connectTextarea);
     }
+    connectCopy.textContent = "COPIED!";
+    connectCopy.style.background = "#2ecc40";
+    setTimeout(() => {
+      if (connectCopy) {
+        connectCopy.textContent = "COPY";
+        connectCopy.style.background = "";
+      }
+    }, 2000);
   };
   connectPaste.hidden = true;
 
