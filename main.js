@@ -307,9 +307,28 @@ function setLinkCopy(session, link) {
       setTimeout(() => {
         if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
       }, 3000);
+      return;
+    } catch {
+      // clipboard API failed, try fallback
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = link;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.append(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      if (duel !== session) { textarea.remove(); return; }
+      copyCodeButton.textContent = "LINK COPIED";
+      setTimeout(() => {
+        if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
+      }, 3000);
     } catch {
       if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
     }
+    textarea.remove();
   };
 }
 
