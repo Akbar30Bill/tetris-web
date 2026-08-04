@@ -1,19 +1,15 @@
-const TRYSTERO_URL = "https://esm.run/trystero@0.25.3";
-const APP_ID = "org.vitetris.online.duel.v1";
 const PROTOCOL_VERSION = 1;
-const CONNECT_TIMEOUT = 25000;
 
 export class DuelConnection {
   constructor({code, role}) {
     this.code = String(code).trim().toUpperCase();
     this.role = role;
-    this.room = null;
-    this.peerId = null;
-    this.peerRole = null;
-    this.actions = null;
     this.listeners = new Map();
+    this.pc = null;
+    this.channel = null;
+    this.connected = false;
     this.closed = false;
-    this.connectTimer = null;
+    this.connectedPeerId = null;
   }
 
   on(type, listener) {
@@ -27,138 +23,122 @@ export class DuelConnection {
   }
 
   async connect() {
-    if (!/^[A-Z2-9]{8}$/.test(this.code)) throw new Error("Room codes contain eight letters or digits.");
     if (!globalThis.RTCPeerConnection) throw new Error("This browser does not support WebRTC.");
-
-    let trystero;
-    try {
-      trystero = await import(TRYSTERO_URL);
-    } catch {
-      throw new Error("Could not load the peer connection module. Check your internet connection.");
-    }
-
     if (this.closed) return;
-    this.room = trystero.joinRoom(
-      {
-        appId: APP_ID,
-        password: this.code,
-        relayConfig: {redundancy: 5, warnOnRelayFailure: false},
-      },
-      this.code,
-      {
-        onJoinError: ({error, peerId}) => {
-          const message = typeof error === "string" ? error : error?.message;
-          if (this.peerId && peerId && peerId !== this.peerId) {
-            this.emit("warning", {message: message || "An unrelated peer could not connect."});
-            return;
-          }
-          this.emit("error", {message: message || "Could not establish a direct connection."});
-        },
-        handshakeTimeoutMs: 20000,
-      },
-    );
+    this.emit("waiting", {code: this.code});
+  }
 
-    this.actions = {
-      hello: this.room.makeAction("hello"),
-      state: this.room.makeAction("state"),
-      attack: this.room.makeAction("attack"),
-      control: this.room.makeAction("control"),
+  async createOffer() {
+    this.pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
+    this.channel = this.pc.createDataChannel("game", {ordered: true});
+    this.setupChannel();
+    this.pc.onicecandidate = () => {};
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    await this.waitGathering();
+    return this.pc.localDescription.sdp;
+  }
+
+  async acceptOffer(sdp) {
+    this.pc = new RTCPeerConnection({iceServers: [{urls: "stun:stun.l.google.com:19302"}]});
+    this.pc.ondatachannel = (event) => {
+      this.channel = event.channel;
+      this.setupChannel();
     };
+    this.pc.onicecandidate = () => {};
+    const init = {type: "offer", sdp};
+    await this.pc.setRemoteDescription(new RTCSessionDescription(init));
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answer);
+    await this.waitGathering();
+    return this.pc.localDescription.sdp;
+  }
 
-    this.actions.hello.onMessage = (data, {peerId}) => this.receiveHello(data, peerId);
-    this.actions.state.onMessage = (data, {peerId}) => this.receive("state", data, peerId);
-    this.actions.attack.onMessage = (data, {peerId}) => this.receive("attack", data, peerId);
-    this.actions.control.onMessage = (data, {peerId}) => this.receive("control", data, peerId);
+  async acceptAnswer(sdp) {
+    const init = {type: "answer", sdp};
+    await this.pc.setRemoteDescription(new RTCSessionDescription(init));
+  }
 
-    this.room.onPeerJoin = (peerId) => {
-      this.safeSend("hello", {protocol: PROTOCOL_VERSION, role: this.role}, peerId);
+  waitGathering() {
+    return new Promise((resolve) => {
+      if (this.pc.iceGatheringState === "complete") return resolve();
+      this.pc.onicegatheringstatechange = () => {
+        if (this.pc.iceGatheringState === "complete") resolve();
+      };
+    });
+  }
+
+  setupChannel() {
+    if (!this.channel) return;
+    this.channel.onopen = () => {
+      this.connected = true;
+      this.connectedPeerId = "peer";
+      this.emit("connected", {peerId: "peer", role: this.role === "host" ? "guest" : "host"});
     };
-    this.room.onPeerLeave = (peerId) => {
-      if (peerId !== this.peerId) return;
-      this.peerId = null;
-      this.peerRole = null;
+    this.channel.onclose = () => {
+      this.connected = false;
+      this.connectedPeerId = null;
       this.emit("disconnected", {});
     };
-    this.emit("waiting", {code: this.code});
-
-    this.connectTimer = setTimeout(() => {
-      if (this.closed || this.peerId) return;
-      this.emit("error", {
-        message: `Could not find a peer after 25 seconds. The room code "${this.code}" might not match, or a direct connection could not be established.`,
-      });
-    }, CONNECT_TIMEOUT);
+    this.channel.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg && msg.type) this.emit(msg.type, msg);
+      } catch {}
+    };
   }
 
-  receiveHello(data, peerId) {
-    if (!data || data.protocol !== PROTOCOL_VERSION) return;
-    if (this.peerId && this.peerId !== peerId) return;
-    if (data.role === this.role) {
-      this.emit("error", {message: `Both players joined as ${this.role}.`});
-      return;
+  safeSend(data, critical = false) {
+    if (!this.channel || this.channel.readyState !== "open") return Promise.resolve(false);
+    try {
+      this.channel.send(JSON.stringify(data));
+      return Promise.resolve(true);
+    } catch {
+      if (critical) this.emit("error", {message: "The peer connection has closed."});
+      return Promise.resolve(false);
     }
-    const expectedRole = this.role === "host" ? "guest" : "host";
-    if (data.role !== expectedRole) return;
-    const firstContact = !this.peerId;
-    this.peerId = peerId;
-    this.peerRole = data.role;
-    if (this.connectTimer) {
-      clearTimeout(this.connectTimer);
-      this.connectTimer = null;
-    }
-    if (firstContact) {
-      this.safeSend("hello", {protocol: PROTOCOL_VERSION, role: this.role}, peerId);
-      this.emit("connected", {peerId, role: data.role});
-    }
-  }
-
-  receive(type, data, peerId) {
-    if (!this.peerId || peerId !== this.peerId) return;
-    this.emit(type, data);
-  }
-
-  safeSend(action, data, target, critical = false) {
-    if (!target) target = this.peerId;
-    if (!this.actions?.[action] || !target || this.closed) return Promise.resolve(false);
-    const promise = this.actions[action].send(data, {target}).then(() => true, () => false);
-    if (!critical) return promise;
-    promise.then((ok) => {
-      if (!ok) this.emit("error", {message: "The peer connection has closed."});
-    });
-    return promise;
   }
 
   sendState(state) {
-    return this.safeSend("state", state);
+    this.safeSend({type: "state", ...state});
   }
 
   sendAttack(attack) {
-    return this.safeSend("attack", attack);
+    this.safeSend({type: "attack", ...attack});
   }
 
   sendControl(control, critical = false) {
-    return this.safeSend("control", control, undefined, critical);
+    this.safeSend({type: "control", ...control}, critical);
   }
 
   async ping() {
-    if (!this.peerId || !this.room) return null;
-    try {
-      return await this.room.ping(this.peerId);
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   leave() {
     this.closed = true;
-    this.peerId = null;
-    this.peerRole = null;
-    if (this.connectTimer) {
-      clearTimeout(this.connectTimer);
-      this.connectTimer = null;
-    }
-    const leavePromise = this.room ? this.room.leave() : Promise.resolve();
-    this.room = null;
-    this.actions = null;
-    return leavePromise;
+    this.connected = false;
+    if (this.channel) { this.channel.close(); this.channel = null; }
+    if (this.pc) { this.pc.close(); this.pc = null; }
+  }
+}
+
+export function minifySDP(sdp) {
+  return sdp.replace(/\r?\n/g, "|").replace(/ +/g, " ");
+}
+
+export function expandSDP(minified) {
+  return minified.replace(/\|/g, "\r\n");
+}
+
+export function encodeOffer(sdp) {
+  return btoa(minifySDP(sdp));
+}
+
+export function decodeOffer(encoded) {
+  try {
+    return expandSDP(atob(encoded));
+  } catch {
+    return null;
   }
 }

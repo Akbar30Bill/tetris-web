@@ -152,22 +152,13 @@ function setupDuelConnection(session) {
   const {connection} = session;
   const current = () => duel === session;
 
-  connection.on("waiting", () => {
-    if (!current()) return;
-    session.stage = "connecting";
-    connectionLabel.textContent = "SEARCHING PUBLIC RELAYS";
-  });
-
   connection.on("connected", async () => {
     if (!current()) return;
-    const connectedPeer = connection.peerId;
     session.connected = true;
     session.localReady = false;
     session.remoteReady = false;
     session.remote = null;
-    session.stage = ["roundover", "matchover"].includes(session.resumeStage)
-      ? session.resumeStage
-      : session.role === "host" ? "lobby" : "syncing";
+    session.stage = session.role === "host" ? "lobby" : "syncing";
     connectionLabel.textContent = "DIRECT LINK";
     if (session.role === "host") {
       connection.sendControl({
@@ -179,13 +170,6 @@ function setupDuelConnection(session) {
       });
     } else {
       connection.sendControl({type: "requestLobby"});
-    }
-    if (session.latency === null) {
-      const latency = await connection.ping();
-      if (!current() || connection.peerId !== connectedPeer || latency === null) return;
-      session.latency = Math.round(latency);
-      connectionLabel.textContent = `DIRECT LINK  ${session.latency}MS`;
-      if (session.role === "host" && session.latency !== null) maybeStartRound(session);
     }
   });
 
@@ -237,13 +221,13 @@ function setupDuelConnection(session) {
   });
 }
 
-async function startDuel(role, code) {
+async function startDuel(role, codeOrSdp) {
   const leavePromise = cleanupDuel();
   mode = "duel";
-  const connection = new DuelConnection({code, role});
+  const connection = new DuelConnection({code: codeOrSdp || "", role});
   const session = {
     role,
-    code,
+    code: codeOrSdp || "",
     connection,
     connected: false,
     stage: "loading",
@@ -267,22 +251,66 @@ async function startDuel(role, code) {
   duel = session;
   engine = new GameEngine({mode: "duel", seed: 1});
   modeLabel.textContent = "ONLINE DUEL";
-  connectionLabel.textContent = "LOADING PEER NETWORK";
+  connectionLabel.textContent = "LOADING...";
   copyCodeButton.hidden = false;
-  copyCodeButton.textContent = "COPY INVITE LINK";
+  readyButton.hidden = true;
   setupDuelConnection(session);
   showGame();
 
-  try {
-    await leavePromise;
-    if (duel !== session) return;
-    await connection.connect();
-  } catch (error) {
-    if (duel !== session) return;
-    session.error = error.message;
-    session.stage = "error";
-    connectionLabel.textContent = "CONNECTION FAILED";
+  await leavePromise;
+  if (duel !== session) return;
+
+  if (role === "host") {
+    connectionLabel.textContent = "CREATING CONNECTION...";
+    try {
+      const sdp = await connection.createOffer();
+      if (duel !== session) return;
+      const encoded = btoa(sdp.replace(/\r?\n/g, "|").replace(/ +/g, " "));
+      session.offerSdp = sdp;
+      session.code = encoded.slice(0, 8);
+      const link = `${location.origin}${location.pathname}#connect=${encodeURIComponent(encoded)}`;
+      connectionLabel.textContent = "INVITE LINK READY";
+      copyCodeButton.textContent = "COPY INVITE LINK";
+      copyCodeButton.hidden = false;
+      session.link = link;
+      if (duel === session) setLinkCopy(session, link);
+    } catch (err) {
+      if (duel !== session) return;
+      session.error = err.message;
+      session.stage = "error";
+      connectionLabel.textContent = "CONNECTION FAILED";
+    }
+  } else {
+    connectionLabel.textContent = "CONNECTING...";
+    try {
+      const sdp = codeOrSdp;
+      const answer = await connection.acceptOffer(sdp);
+      if (duel !== session) return;
+      const encoded = btoa(answer.replace(/\r?\n/g, "|").replace(/ +/g, " "));
+      history.replaceState(null, "", `#answer=${encodeURIComponent(encoded)}`);
+    } catch (err) {
+      if (duel !== session) return;
+      session.error = err.message;
+      session.stage = "error";
+      connectionLabel.textContent = "CONNECTION FAILED";
+    }
   }
+}
+
+function setLinkCopy(session, link) {
+  copyCodeButton.onclick = async () => {
+    if (!duel || duel !== session) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      if (duel !== session) return;
+      copyCodeButton.textContent = "LINK COPIED";
+      setTimeout(() => {
+        if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
+      }, 3000);
+    } catch {
+      if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
+    }
+  };
 }
 
 function cleanupDuel() {
@@ -507,9 +535,9 @@ function duelMessages(now) {
   if (!duel) return {localMessage: "", remoteMessage: ""};
   switch (duel.stage) {
     case "loading":
-      return {localMessage: `ROOM ${duel.code}`, remoteMessage: "LOADING"};
+      return {localMessage: "INITIALIZING", remoteMessage: "..."};
     case "connecting":
-      return {localMessage: `ROOM ${duel.code}`, remoteMessage: "WAITING"};
+      return {localMessage: "AWAITING PEER", remoteMessage: "WAITING"};
     case "error":
       return {localMessage: "CONNECTION FAILED", remoteMessage: "RETRY"};
     case "disconnected":
@@ -705,21 +733,6 @@ roomInput.addEventListener("input", () => {
 });
 leaveButton.addEventListener("click", () => showMenu());
 readyButton.addEventListener("click", markReady);
-copyCodeButton.addEventListener("click", async () => {
-  if (!duel) return;
-  const session = duel;
-  const link = `${location.origin}${location.pathname}#join=${session.code}`;
-  try {
-    await navigator.clipboard.writeText(link);
-    if (duel !== session) return;
-    copyCodeButton.textContent = "LINK COPIED";
-    setTimeout(() => {
-      if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
-    }, 3000);
-  } catch {
-    if (duel === session) copyCodeButton.textContent = "COPY INVITE LINK";
-  }
-});
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
@@ -732,12 +745,44 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-const joinParam = location.hash.match(/^#join=([A-Z2-9]{8})$/i);
-if (joinParam) {
-  const code = joinParam[1].toUpperCase();
-  roomInput.value = code;
-  history.replaceState(null, "", location.pathname);
-  requestAnimationFrame(() => startDuel("guest", code));
-}
+const hashHandler = () => {
+  const connectMatch = location.hash.match(/^#connect=(.+)$/i);
+  const answerMatch = location.hash.match(/^#answer=(.+)$/i);
+
+  if (connectMatch) {
+    const encoded = decodeURIComponent(connectMatch[1]);
+    let sdp;
+    try {
+      sdp = atob(encoded).replace(/\|/g, "\r\n");
+    } catch {
+      return;
+    }
+    if (sdp && sdp.startsWith("v=")) {
+      history.replaceState(null, "", location.pathname);
+      roomInput.value = "CONNECTING";
+      requestAnimationFrame(() => startDuel("guest", sdp));
+    }
+    return;
+  }
+
+  if (answerMatch && duel && duel.connection && duel.offerSdp) {
+    const encoded = decodeURIComponent(answerMatch[1]);
+    let sdp;
+    try {
+      sdp = atob(encoded).replace(/\|/g, "\r\n");
+    } catch {
+      return;
+    }
+    if (sdp && sdp.startsWith("v=")) {
+      history.replaceState(null, "", location.pathname);
+      duel.connection.acceptAnswer(sdp).catch(() => {});
+      connectionLabel.textContent = "DIRECT LINK";
+    }
+    return;
+  }
+};
+
+window.addEventListener("hashchange", hashHandler);
+hashHandler();
 
 requestAnimationFrame(frame);
