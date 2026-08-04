@@ -212,20 +212,21 @@ button {
   text-align: center;
 }
 
-.connect-textarea {
+.connect-code {
   width: 100%;
   box-sizing: border-box;
-  min-height: 90px;
-  padding: 10px;
+  min-height: 54px;
+  padding: 10px 12px;
   border: 1px solid var(--blue-dim);
   background: #05050d;
   color: var(--yellow);
-  font: 11px monospace;
-  resize: vertical;
-  word-break: break-all;
+  font: bold clamp(1rem, 5vw, 1.45rem) monospace;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
 }
 
-.connect-textarea:focus {
+.connect-code:focus {
   outline: none;
   border-color: var(--cyan);
 }
