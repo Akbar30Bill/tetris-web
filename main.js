@@ -2,6 +2,24 @@ import {GameEngine, randomSeed} from "./game.js";
 import {createRoomCode, formatRoomCode, makePeer, roomCodeFromInvite} from "./network.js";
 import {TerminalRenderer} from "./render.js";
 
+function formatCodeInput(value) {
+  const raw = value.replace(/[-\s]/g, "").toUpperCase().slice(0, 10);
+  if (raw.length <= 3) return raw;
+  if (raw.length <= 7) return raw.slice(0, 3) + "-" + raw.slice(3);
+  return raw.slice(0, 3) + "-" + raw.slice(3, 7) + "-" + raw.slice(7);
+}
+
+function formattedCursorAfter(rawCount, formatted) {
+  let count = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (formatted[i] !== "-") {
+      count++;
+      if (count === rawCount) return i + 1;
+    }
+  }
+  return formatted.length;
+}
+
 const menuScreen = document.querySelector("#menu-screen");
 const connectScreen = document.querySelector("#connect-screen");
 const gameScreen = document.querySelector("#game-screen");
@@ -214,7 +232,62 @@ function showJoin() {
   const updateJoin = () => {
     connectPaste.disabled = !roomCodeFromInvite(connectCode.value);
   };
-  connectCode.oninput = updateJoin;
+
+  const handleInput = () => {
+    const value = connectCode.value;
+    const oldCursor = connectCode.selectionStart;
+    const oldDashesBefore = (value.slice(0, oldCursor).match(/-/g) || []).length;
+    const rawCount = oldCursor - oldDashesBefore;
+    const formatted = formatCodeInput(value);
+    connectCode.value = formatted;
+    connectCode.setSelectionRange(
+      formattedCursorAfter(rawCount, formatted),
+      formattedCursorAfter(rawCount, formatted)
+    );
+    updateJoin();
+  };
+
+  const skipDash = (rawPos) => {
+    if (rawPos < 0) return;
+    const raw = connectCode.value.replace(/[-\s]/g, "").toUpperCase();
+    if (rawPos >= raw.length) return;
+    const newRaw = raw.slice(0, rawPos) + raw.slice(rawPos + 1);
+    const formatted = formatCodeInput(newRaw);
+    connectCode.value = formatted;
+    connectCode.setSelectionRange(
+      formattedCursorAfter(rawPos, formatted),
+      formattedCursorAfter(rawPos, formatted)
+    );
+    updateJoin();
+  };
+
+  connectCode.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && connectCode.selectionStart === connectCode.selectionEnd) {
+      const pos = connectCode.selectionStart;
+      if (pos > 0 && connectCode.value[pos - 1] === "-") {
+        e.preventDefault();
+        const dashesBefore = (connectCode.value.slice(0, pos).match(/-/g) || []).length;
+        skipDash(pos - dashesBefore - 1);
+      }
+    }
+    if (e.key === "Delete" && connectCode.selectionStart === connectCode.selectionEnd) {
+      const pos = connectCode.selectionStart;
+      if (pos < connectCode.value.length && connectCode.value[pos] === "-") {
+        e.preventDefault();
+        const dashesBefore = (connectCode.value.slice(0, pos).match(/-/g) || []).length;
+        skipDash(pos - dashesBefore);
+      }
+    }
+  });
+  connectCode.addEventListener("input", handleInput);
+  connectCode.addEventListener("paste", () => {
+    setTimeout(() => {
+      const formatted = formatCodeInput(connectCode.value);
+      connectCode.value = formatted;
+      connectCode.setSelectionRange(formatted.length, formatted.length);
+      updateJoin();
+    }, 0);
+  });
   updateJoin();
   connectPaste.onclick = () => startJoin(connectCode.value);
   connectCancel.onclick = showMenu;
