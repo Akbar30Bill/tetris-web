@@ -104,6 +104,12 @@ function restartSolo() {
 
 // --- Connection flow ---
 
+function requireSecureDuel() {
+  if (window.isSecureContext && crypto?.subtle) return true;
+  showMenu("ONLINE DUELS REQUIRE HTTPS");
+  return false;
+}
+
 function copyText(text) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   return Promise.reject(new Error("Clipboard access unavailable"));
@@ -172,6 +178,7 @@ function wirePeer(role) {
 }
 
 function startHost() {
+  if (!requireSecureDuel()) return;
   cleanupDuel();
   mode = "duel";
   showConnect();
@@ -193,6 +200,7 @@ function startHost() {
 }
 
 function showJoin() {
+  if (!requireSecureDuel()) return;
   showConnect();
   connectRoleLabel.textContent = "GUEST";
   connectStatus.textContent = "ENTER ROOM CODE";
@@ -213,6 +221,7 @@ function showJoin() {
 }
 
 function startJoin(rawRoomCode) {
+  if (!requireSecureDuel()) return;
   const roomCode = roomCodeFromInvite(rawRoomCode);
   if (!roomCode) {
     connectStatus.textContent = "INVALID ROOM CODE";
