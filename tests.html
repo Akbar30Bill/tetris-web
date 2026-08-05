@@ -789,7 +789,8 @@
         const peer = makePeer({
           roomCode: "7k3mp9qd2x",
           role: "host",
-          join: (_config, _roomCode, callbacks) => {
+          join: (config, _roomCode, callbacks) => {
+            equal(config.relayConfig.urls, ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]);
             handlers.handshake = callbacks.onPeerHandshake;
             return room;
           },

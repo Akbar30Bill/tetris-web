@@ -4,6 +4,11 @@ const APP_ID = "vitetris-online-v1";
 const ACTION_ID = "duel-v1";
 const ROOM_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ROOM_CODE_LENGTH = 10;
+const RELAY_URLS = [
+  "wss://relay.damus.io",
+  "wss://nos.lol",
+  "wss://relay.nostr.band",
+];
 
 export function createRoomCode() {
   const values = new Uint32Array(ROOM_CODE_LENGTH);
@@ -64,7 +69,7 @@ export function makePeer({roomCode, role, join = joinRoom}) {
   const pendingHandshakes = new Set();
   const admittedPeers = new Set();
 
-  const room = join({appId: APP_ID}, normalizedRoomCode, {
+  const room = join({appId: APP_ID, relayConfig: {urls: RELAY_URLS}}, normalizedRoomCode, {
     onJoinError({error}) {
       if (!closed) onError?.(error instanceof Error ? error : new Error(String(error)));
     },
