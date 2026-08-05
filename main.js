@@ -717,7 +717,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "Escape") {
     event.preventDefault();
-    if (mode === "duel" || !connectScreen.hidden) showMenu();
+    if (mode === "solo" || mode === "duel" || !connectScreen.hidden) showMenu();
     return;
   }
   if (event.code === "Enter") {
