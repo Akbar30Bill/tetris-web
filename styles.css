@@ -368,7 +368,7 @@ button {
 .touch-controls {
   width: min(100%, 420px);
   margin: 12px auto 0;
-  display: none;
+  display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: auto auto auto;
   gap: 8px;
@@ -429,7 +429,14 @@ button {
   display: none !important;
 }
 
+@media (pointer: fine) and (min-width: 641px) {
+  .touch-controls {
+    display: none;
+  }
+}
+
 @media (pointer: coarse), (max-width: 640px) {
+  .app-shell {
   .app-shell {
     padding-top: max(8px, env(safe-area-inset-top));
     padding-bottom: max(8px, env(safe-area-inset-bottom));
@@ -441,10 +448,6 @@ button {
 
   #game-canvas {
     width: 100%;
-  }
-
-  .touch-controls {
-    display: grid;
   }
 
   .tap-overlay:not([hidden]) {
