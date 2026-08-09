@@ -309,6 +309,37 @@ button {
   width: 100%;
   display: grid;
   place-items: center;
+  position: relative;
+}
+
+.tap-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 60%);
+  z-index: 2;
+  cursor: pointer;
+}
+
+.tap-overlay-text {
+  padding: 18px 32px;
+  border: 2px solid var(--cyan);
+  color: var(--cyan);
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-align: center;
+  background: rgb(0 0 0 / 80%);
+  text-shadow: 0 0 8px rgb(40 231 231 / 50%);
+  box-shadow: 0 0 20px rgb(40 231 231 / 25%);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 #game-canvas {
@@ -335,29 +366,63 @@ button {
 }
 
 .touch-controls {
-  width: min(100%, 560px);
+  width: min(100%, 420px);
   margin: 12px auto 0;
   display: none;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 7px;
+  grid-template-areas:
+    ".      rotCW     ."
+    "left   hardDrop  right"
+    ".      softDrop  rotCCW";
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
 .touch-controls button {
-  min-height: 47px;
+  min-height: 52px;
   border: 1px solid var(--blue);
   background: #050511;
   color: #fff;
   touch-action: none;
   user-select: none;
+  transition: transform 0.06s, background 0.06s, box-shadow 0.06s;
 }
 
 .touch-controls button:active,
 .touch-controls button.active {
   background: var(--blue);
+  box-shadow: 0 0 14px var(--blue);
+  transform: scale(0.92);
 }
 
-.touch-controls .wide {
-  color: var(--yellow);
+.ctrl-rot-cw { grid-area: rotCW; }
+.ctrl-left { grid-area: left; }
+.ctrl-drop { grid-area: hardDrop; }
+.ctrl-right { grid-area: right; }
+.ctrl-down { grid-area: softDrop; }
+.ctrl-rot-ccw { grid-area: rotCCW; }
+
+.ctrl-drop {
+  min-height: 58px !important;
+  color: var(--yellow) !important;
+  font-weight: bold;
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  border-color: var(--yellow) !important;
+}
+
+.ctrl-drop:active,
+.ctrl-drop.active {
+  background: var(--yellow) !important;
+  color: #000 !important;
+  box-shadow: 0 0 18px var(--yellow);
+}
+
+.ctrl-rot-cw,
+.ctrl-rot-ccw {
+  min-height: 44px !important;
+  font-size: 0.85rem;
+  color: #888 !important;
+  border-color: var(--blue-dim) !important;
 }
 
 .sr-only {
@@ -394,6 +459,10 @@ button {
     display: grid;
   }
 
+  .tap-overlay:not([hidden]) {
+    display: flex;
+  }
+
   .control-hint {
     display: none;
   }
@@ -412,19 +481,22 @@ button {
   }
 
   .touch-controls {
-    gap: 4px;
+    gap: 5px;
   }
 
   .touch-controls button {
-    min-height: 43px;
-    padding-inline: 4px;
+    min-height: 44px;
+  }
+
+  .ctrl-drop {
+    min-height: 48px !important;
   }
 }
 
 @media (max-height: 620px) and (orientation: landscape) {
   .game-screen {
     display: grid;
-    grid-template-columns: 1fr minmax(62px, 84px);
+    grid-template-columns: 1fr minmax(80px, 110px);
     column-gap: 8px;
   }
 
@@ -438,8 +510,26 @@ button {
   }
 
   .touch-controls {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-areas:
+      "rotCW"
+      "left"
+      "hardDrop"
+      "right"
+      "softDrop"
+      "rotCCW";
+    grid-template-columns: 1fr;
     align-self: center;
     margin: 0;
+    width: auto;
+    gap: 5px;
+  }
+
+  .touch-controls button {
+    min-height: 38px !important;
+    font-size: 0.7rem;
+  }
+
+  .ctrl-drop {
+    font-size: 0.72rem !important;
   }
 }

@@ -34,6 +34,8 @@ const copyCodeButton = document.querySelector("#copy-code-button");
 const readyButton = document.querySelector("#ready-button");
 const leaveButton = document.querySelector("#leave-button");
 const touchControls = document.querySelector("#touch-controls");
+const tapOverlay = document.querySelector("#tap-overlay");
+const tapOverlayText = document.querySelector("#tap-overlay-text");
 const connectRoleLabel = document.querySelector("#connect-role-label");
 const connectStatus = document.querySelector("#connect-status");
 const connectInstruction = document.querySelector("#connect-instruction");
@@ -582,6 +584,26 @@ function soloMessage() {
   return "";
 }
 
+function updateTapOverlay() {
+  const isTouch = matchMedia("(pointer: coarse)").matches;
+  if (!isTouch || !engine || mode !== "solo") {
+    tapOverlay.hidden = true;
+    return;
+  }
+  if (engine.status === "ready") {
+    tapOverlay.hidden = false;
+    tapOverlayText.textContent = "TAP TO START";
+  } else if (engine.status === "gameover") {
+    tapOverlay.hidden = false;
+    tapOverlayText.textContent = "TAP TO PLAY AGAIN";
+  } else if (engine.status === "paused") {
+    tapOverlay.hidden = false;
+    tapOverlayText.textContent = "TAP TO RESUME";
+  } else {
+    tapOverlay.hidden = true;
+  }
+}
+
 function duelMessages(now) {
   if (!duel) return {localMessage: "", remoteMessage: ""};
   switch (duel.stage) {
@@ -654,6 +676,7 @@ function frame(now) {
     engine.tick(elapsed);
     processEngineEvents();
   }
+  updateTapOverlay();
   if (mode === "duel" && duel?.stage === "playing") sendState();
   updateReadyButton();
   render(now);
@@ -761,6 +784,13 @@ touchControls.addEventListener("pointerdown", (event) => {
 for (const eventName of ["pointerup", "pointercancel", "lostpointercapture"]) {
   touchControls.addEventListener(eventName, clearTouchRepeat);
 }
+
+tapOverlay.addEventListener("click", () => {
+  if (!engine || mode !== "solo") return;
+  if (engine.status === "ready") engine.start();
+  else if (engine.status === "gameover") restartSolo();
+  else if (engine.status === "paused") engine.pause();
+});
 
 // --- UI button wiring ---
 

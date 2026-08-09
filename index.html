@@ -60,15 +60,18 @@
         <div class="canvas-wrap">
           <canvas id="game-canvas" width="560" height="416" tabindex="0"
             aria-label="Falling-block game board"></canvas>
+          <div id="tap-overlay" class="tap-overlay" hidden>
+            <span id="tap-overlay-text" class="tap-overlay-text"></span>
+          </div>
         </div>
 
         <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
-          <button type="button" data-action="left" aria-label="Move left">&lt;</button>
-          <button type="button" data-action="right" aria-label="Move right">&gt;</button>
-          <button type="button" data-action="softDrop" aria-label="Soft drop">v</button>
-          <button type="button" data-action="rotateCCW" aria-label="Rotate anticlockwise">B</button>
-          <button type="button" data-action="rotateCW" aria-label="Rotate clockwise">A</button>
-          <button type="button" data-action="hardDrop" class="wide" aria-label="Hard drop">DROP</button>
+          <button type="button" data-action="rotateCW" aria-label="Rotate clockwise" class="ctrl-rot-cw">↻</button>
+          <button type="button" data-action="left" aria-label="Move left" class="ctrl-left">◄</button>
+          <button type="button" data-action="hardDrop" aria-label="Hard drop" class="ctrl-drop">DROP</button>
+          <button type="button" data-action="right" aria-label="Move right" class="ctrl-right">►</button>
+          <button type="button" data-action="softDrop" aria-label="Soft drop" class="ctrl-down">▼</button>
+          <button type="button" data-action="rotateCCW" aria-label="Rotate anticlockwise" class="ctrl-rot-ccw">↺</button>
         </div>
 
         <p class="control-hint">
