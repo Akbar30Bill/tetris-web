@@ -777,6 +777,8 @@ window.addEventListener("keydown", (event) => {
   startOrApplyAction(action);
 });
 
+touchControls.addEventListener("contextmenu", (e) => e.preventDefault());
+
 touchControls.addEventListener("pointerdown", (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
