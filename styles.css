@@ -370,10 +370,11 @@ button {
   margin: 12px auto 0;
   display: none;
   grid-template-areas:
-    ".      rotCW     ."
-    "left   hardDrop  right"
-    ".      softDrop  rotCCW";
+    ".      rotCW    ."
+    "left   softDrop right"
+    "hardDrop hardDrop hardDrop";
   grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto auto;
   gap: 8px;
 }
 
@@ -396,10 +397,9 @@ button {
 
 .ctrl-rot-cw { grid-area: rotCW; }
 .ctrl-left { grid-area: left; }
-.ctrl-drop { grid-area: hardDrop; }
-.ctrl-right { grid-area: right; }
 .ctrl-down { grid-area: softDrop; }
-.ctrl-rot-ccw { grid-area: rotCCW; }
+.ctrl-right { grid-area: right; }
+.ctrl-drop { grid-area: hardDrop; }
 
 .ctrl-drop {
   min-height: 58px !important;
@@ -415,14 +415,6 @@ button {
   background: var(--yellow) !important;
   color: #000 !important;
   box-shadow: 0 0 18px var(--yellow);
-}
-
-.ctrl-rot-cw,
-.ctrl-rot-ccw {
-  min-height: 44px !important;
-  font-size: 0.85rem;
-  color: #888 !important;
-  border-color: var(--blue-dim) !important;
 }
 
 .sr-only {
@@ -513,10 +505,9 @@ button {
     grid-template-areas:
       "rotCW"
       "left"
-      "hardDrop"
-      "right"
       "softDrop"
-      "rotCCW";
+      "right"
+      "hardDrop";
     grid-template-columns: 1fr;
     align-self: center;
     margin: 0;
