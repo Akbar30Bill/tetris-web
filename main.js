@@ -608,11 +608,17 @@ function duelMessages(now) {
   if (!duel) return {localMessage: "", remoteMessage: ""};
   switch (duel.stage) {
     case "lobby":
-    case "syncing":
+    case "syncing": {
+      const touch = matchMedia("(pointer: coarse)").matches;
       return {
-        localMessage: duel.stage === "syncing" ? "SYNCING" : duel.localReady ? "READY" : "PRESS ENTER",
+        localMessage: duel.stage === "syncing"
+          ? "SYNCING"
+          : duel.localReady
+            ? "READY"
+            : touch ? "TAP DROP TO READY" : "PRESS ENTER",
         remoteMessage: duel.remoteReady ? "READY" : "WAITING",
       };
+    }
     case "countdown": {
       const count = Math.max(1, Math.ceil((duel.startAt - now) / 1000));
       return {localMessage: String(count), remoteMessage: String(count)};
@@ -691,7 +697,12 @@ function startOrApplyAction(action) {
     engine.input(action);
     return;
   }
-  if (mode === "duel" && duel?.stage === "playing") engine.input(action);
+  if (mode === "duel") {
+    if (duel?.stage === "playing") { engine.input(action); return; }
+    if (action === "hardDrop" && ["lobby", "roundover", "matchover"].includes(duel?.stage)) {
+      markReady();
+    }
+  }
 }
 
 function keyAction(code) {
