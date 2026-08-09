@@ -369,10 +369,6 @@ button {
   width: min(100%, 420px);
   margin: 12px auto 0;
   display: none;
-  grid-template-areas:
-    ".      rotCW    ."
-    "left   softDrop right"
-    "hardDrop hardDrop hardDrop";
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: auto auto auto;
   gap: 8px;
@@ -395,11 +391,11 @@ button {
   transform: scale(0.92);
 }
 
-.ctrl-rot-cw { grid-area: rotCW; }
-.ctrl-left { grid-area: left; }
-.ctrl-down { grid-area: softDrop; }
-.ctrl-right { grid-area: right; }
-.ctrl-drop { grid-area: hardDrop; }
+.ctrl-rot-cw { grid-column: 2; grid-row: 1; }
+.ctrl-left { grid-column: 1; grid-row: 2; }
+.ctrl-down { grid-column: 2; grid-row: 2; }
+.ctrl-right { grid-column: 3; grid-row: 2; }
+.ctrl-drop { grid-column: 1 / -1; grid-row: 3; }
 
 .ctrl-drop {
   min-height: 58px !important;
@@ -502,18 +498,19 @@ button {
   }
 
   .touch-controls {
-    grid-template-areas:
-      "rotCW"
-      "left"
-      "softDrop"
-      "right"
-      "hardDrop";
     grid-template-columns: 1fr;
+    grid-template-rows: repeat(5, auto);
     align-self: center;
     margin: 0;
     width: auto;
     gap: 5px;
   }
+
+  .ctrl-rot-cw { grid-column: auto; grid-row: auto; }
+  .ctrl-left { grid-column: auto; grid-row: auto; }
+  .ctrl-down { grid-column: auto; grid-row: auto; }
+  .ctrl-right { grid-column: auto; grid-row: auto; }
+  .ctrl-drop { grid-column: auto; grid-row: auto; }
 
   .touch-controls button {
     min-height: 38px !important;
